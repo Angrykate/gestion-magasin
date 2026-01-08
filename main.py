@@ -1,10 +1,13 @@
 import tkinter as tk
-from ui.login import LoginFrame
+from ui.base_frame import BaseFrame
+from ui.dashboard import DashboardFrame
 
 root = tk.Tk()
-root.title("Système de gestion de magasin")
+root.title("Gestion de magasin")
+root.geometry("1270x668")
+root.resizable(False, False)
 
-login_page = LoginFrame(root)
-login_page.pack(expand=True, fill="both")
+base = BaseFrame(root, user_name="Jean Dupont", user_role="Administrateur")
+DashboardFrame(base.content_frame)
 
 root.mainloop()
