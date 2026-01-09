@@ -7,7 +7,7 @@ DB_CONFIG = {
     "port": 5432,
     "dbname": "gestion_magasin",
     "user": "postgres",
-    "password": "ton_mot_de_passe"
+    "password": "angrykate2026"
 }
 
 def get_connection():
