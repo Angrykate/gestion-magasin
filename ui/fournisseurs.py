@@ -75,12 +75,13 @@ class FournisseurFrame(tk.Frame):
         self.id_entry.config(state='readonly')
 
         self.nom_entry = tk.Entry(self.form_frame, font=('times new roman', 12), width=30)
-        self.contact_entry = tk.Entry(self.form_frame, font=('times new roman', 12), width=30)
+        # Adresse: plus grand champ texte
+        self.adresse_text = tk.Text(self.form_frame, font=('times new roman', 12), width=30, height=4)
 
         fields = [
             ('ID', self.id_entry),
             ('Nom', self.nom_entry),
-            ('Contact', self.contact_entry)
+            ('Adresse', self.adresse_text)
         ]
 
         for i, (label_text, widget) in enumerate(fields):
@@ -101,7 +102,7 @@ class FournisseurFrame(tk.Frame):
 
         self.tree = ttk.Treeview(
             table_frame,
-            columns=('id', 'nom', 'contact'),
+            columns=('id', 'nom', 'adresse'),
             show='headings',
             yscrollcommand=scrollbar.set
         )
@@ -111,7 +112,7 @@ class FournisseurFrame(tk.Frame):
         columns = [
             ('id', 'ID', 60),
             ('nom', 'Nom', 150),
-            ('contact', 'Contact', 150)
+            ('adresse', 'Adresse', 250)
         ]
 
         for col, text, width in columns:
@@ -156,7 +157,7 @@ class FournisseurFrame(tk.Frame):
                 values=(
                     sup['id_fournisseur'],
                     sup['nom'],
-                    sup['contact']
+                    sup['adresse']  # renommer
                 )
             )
 
@@ -166,7 +167,7 @@ class FournisseurFrame(tk.Frame):
             messagebox.showwarning("Attention", "Veuillez entrer un nom à rechercher")
             return
         self.tree.delete(*self.tree.get_children())
-        results = search_suppliers('nom', keyword)
+        results = search_suppliers(keyword)  # pas besoin de 'nom'
         if not results:
             messagebox.showinfo("Info", "Aucun fournisseur trouvé")
             return
@@ -174,7 +175,7 @@ class FournisseurFrame(tk.Frame):
             self.tree.insert(
                 '',
                 tk.END,
-                values=(sup['id_fournisseur'], sup['nom'], sup['contact'])
+                values=(sup['id_fournisseur'], sup['nom'], sup['adresse'])
             )
 
     def on_tree_select(self, event):
@@ -190,17 +191,18 @@ class FournisseurFrame(tk.Frame):
         self.nom_entry.delete(0, tk.END)
         self.nom_entry.insert(0, values[1])
 
-        self.contact_entry.delete(0, tk.END)
-        self.contact_entry.insert(0, values[2])
+        self.adresse_text.delete("1.0", tk.END)
+        self.adresse_text.insert("1.0", values[2])
 
     def add_supplier(self):
         nom = self.nom_entry.get()
-        contact = self.contact_entry.get()
+        adresse = self.adresse_text.get("1.0", tk.END).strip()
         if not nom:
             messagebox.showwarning("Erreur", "Veuillez remplir le nom")
             return
-        if add_supplier(nom, contact):
-            messagebox.showinfo("Succès", "Fournisseur ajouté avec succès")
+        supplier_id = add_supplier(nom, adresse)
+        if supplier_id is not None:
+            messagebox.showinfo("Succès", f"Fournisseur ajouté avec succès (ID {supplier_id})")
             self.clear_form()
             self.load_suppliers()
         else:
@@ -209,14 +211,14 @@ class FournisseurFrame(tk.Frame):
     def update_supplier(self):
         sup_id = self.id_entry.get()
         nom = self.nom_entry.get()
-        contact = self.contact_entry.get()
+        adresse = self.adresse_text.get("1.0", tk.END).strip()
         if not sup_id:
             messagebox.showwarning("Attention", "Sélectionnez un fournisseur")
             return
         if not nom:
             messagebox.showwarning("Erreur", "Le nom est obligatoire")
             return
-        if update_supplier(sup_id, nom, contact):
+        if update_supplier(sup_id, nom, adresse):
             messagebox.showinfo("Succès", "Fournisseur mis à jour")
             self.clear_form()
             self.load_suppliers()
@@ -242,4 +244,4 @@ class FournisseurFrame(tk.Frame):
         self.id_entry.delete(0, tk.END)
         self.id_entry.config(state='readonly')
         self.nom_entry.delete(0, tk.END)
-        self.contact_entry.delete(0, tk.END)
+        self.adresse_text.delete("1.0", tk.END)

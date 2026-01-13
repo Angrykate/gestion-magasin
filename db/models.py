@@ -128,7 +128,12 @@ def update_employee(emp_id, nom, email, password, role):
         conn.close()
 
 # ===================== AJOUTER UN FOURNISSEUR =====================
-def add_supplier(nom, contact):
+def add_supplier(nom, adresse):
+    """Ajoute un fournisseur et retourne son id"""
+    if not nom:
+        print("Erreur add_supplier : le nom est obligatoire")
+        return None
+
     conn = get_connection()
     if not conn:
         return None
@@ -139,10 +144,15 @@ def add_supplier(nom, contact):
             INSERT INTO fournisseur (nom_fournisseur, adresse_fournisseur)
             VALUES (%s, %s)
             RETURNING id_fournisseur
-        """, (nom, contact))
-        supplier_id = cur.fetchone()[0]
-        conn.commit()
-        return supplier_id
+        """, (nom, adresse))
+        result = cur.fetchone()
+        if result:
+            supplier_id = result['id_fournisseur']  # RealDictCursor
+            conn.commit()
+            return supplier_id
+        else:
+            conn.rollback()
+            return None
     except Exception as e:
         print("Erreur add_supplier :", e)
         conn.rollback()
@@ -161,7 +171,7 @@ def get_all_suppliers():
     cur = get_cursor(conn)
     try:
         cur.execute("""
-            SELECT id_fournisseur, nom_fournisseur AS nom, adresse_fournisseur AS contact
+            SELECT id_fournisseur, nom_fournisseur AS nom, adresse_fournisseur AS adresse
             FROM fournisseur
             ORDER BY id_fournisseur DESC
         """)
@@ -183,7 +193,7 @@ def search_suppliers(keyword):
     cur = get_cursor(conn)
     try:
         cur.execute("""
-            SELECT id_fournisseur, nom_fournisseur AS nom, adresse_fournisseur AS contact
+            SELECT id_fournisseur, nom_fournisseur AS nom, adresse_fournisseur AS adresse
             FROM fournisseur
             WHERE nom_fournisseur ILIKE %s
             ORDER BY id_fournisseur DESC
@@ -198,7 +208,7 @@ def search_suppliers(keyword):
 
 
 # ===================== METTRE À JOUR UN FOURNISSEUR =====================
-def update_supplier(supplier_id, nom, contact):
+def update_supplier(supplier_id, nom, adresse):
     conn = get_connection()
     if not conn:
         return False
@@ -209,7 +219,7 @@ def update_supplier(supplier_id, nom, contact):
             UPDATE fournisseur
             SET nom_fournisseur=%s, adresse_fournisseur=%s
             WHERE id_fournisseur=%s
-        """, (nom, contact, supplier_id))
+        """, (nom, adresse, supplier_id))
         conn.commit()
         return True
     except Exception as e:
@@ -242,6 +252,7 @@ def delete_supplier(supplier_id):
     finally:
         cur.close()
         conn.close()
+
 def authenticate_user(email, password):
     conn = get_connection()
     if not conn:
