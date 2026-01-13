@@ -1,14 +1,6 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
-
-
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "dbname": "gestion_magasin",
-    "user": "postgres",
-    "password": "angrykate2026"
-}
+from db.db_config import DB_CONFIG
 
 def get_connection():
     """Renvoie une connexion à la base de données"""
