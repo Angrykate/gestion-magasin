@@ -233,7 +233,7 @@ class EmployeFrame(tk.Frame):
 
     def search_employee(self):
         field_map = {
-            'Id': 'id_utilisateur',
+            'role': 'role',
             'Nom': 'nom',
             'Email': 'email'
         }
@@ -316,3 +316,5 @@ class EmployeFrame(tk.Frame):
         self.email_entry.delete(0, tk.END)
         self.pass_entry.delete(0, tk.END)
         self.role_cb.set('Sélectionner un rôle')
+        for item in self.tree.selection():
+            self.tree.selection_remove(item)

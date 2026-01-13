@@ -35,7 +35,7 @@ def add_employee(nom, email, mot_de_passe, role):
 
 def search_employees(field, keyword):
     allowed_fields = {
-        'id_utilisateur': 'id_utilisateur',
+        'role': 'role',
         'nom': 'nom',
         'email': 'email'
     }
@@ -129,11 +129,6 @@ def update_employee(emp_id, nom, email, password, role):
 
 # ===================== AJOUTER UN FOURNISSEUR =====================
 def add_supplier(nom, adresse):
-    """Ajoute un fournisseur et retourne son id"""
-    if not nom:
-        print("Erreur add_supplier : le nom est obligatoire")
-        return None
-
     conn = get_connection()
     if not conn:
         return None
@@ -145,14 +140,9 @@ def add_supplier(nom, adresse):
             VALUES (%s, %s)
             RETURNING id_fournisseur
         """, (nom, adresse))
-        result = cur.fetchone()
-        if result:
-            supplier_id = result['id_fournisseur']  # RealDictCursor
-            conn.commit()
-            return supplier_id
-        else:
-            conn.rollback()
-            return None
+        supplier_id = cur.fetchone()['id_fournisseur']
+        conn.commit()
+        return supplier_id
     except Exception as e:
         print("Erreur add_supplier :", e)
         conn.rollback()
@@ -160,6 +150,7 @@ def add_supplier(nom, adresse):
     finally:
         cur.close()
         conn.close()
+
 
 
 # ===================== OBTENIR TOUS LES FOURNISSEURS =====================
@@ -252,7 +243,316 @@ def delete_supplier(supplier_id):
     finally:
         cur.close()
         conn.close()
+# ===================== CATEGORIES =====================
+def add_category(nom, description, seuil_min_defaut):
+    conn = get_connection()
+    if not conn:
+        return None
 
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            INSERT INTO categorie (nom_categorie, seuil_min_defaut, description)
+            VALUES (%s, %s, %s)
+            RETURNING id_categorie
+        """, (nom, seuil_min_defaut, description))
+
+        row = cur.fetchone()
+        conn.commit()
+        return row['id_categorie']
+
+    except Exception as e:
+        print("Erreur add_category :", repr(e))
+        conn.rollback()
+        return None
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_all_categories():
+    """
+    Récupère toutes les catégories.
+    :return: liste de dict
+    """
+    conn = get_connection()
+    if not conn:
+        return []
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT id_categorie, nom_categorie, description, seuil_min_defaut
+            FROM categorie
+            ORDER BY id_categorie DESC
+        """)
+        return cur.fetchall()
+    except Exception as e:
+        print("Erreur get_all_categories :", e)
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def update_category(cat_id, nom, description, seuil_min_defaut):
+
+    conn = get_connection()
+    if not conn:
+        return False
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            UPDATE categorie
+            SET nom_categorie=%s, description=%s, seuil_min_defaut=%s
+            WHERE id_categorie=%s
+        """, (nom, description, seuil_min_defaut, cat_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Erreur update_category :", e)
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
+
+def delete_category(cat_id):
+    """
+    Supprime une catégorie.
+    :param cat_id: int
+    :return: True si succès, False sinon
+    """
+    conn = get_connection()
+    if not conn:
+        return False
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute(
+            "DELETE FROM categorie WHERE id_categorie = %s",
+            (cat_id,)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Erreur delete_category :", e)
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
+def search_categories(keyword):
+    """
+    Recherche les catégories par nom.
+    :param keyword: str
+    :return: liste de dict
+    """
+    conn = get_connection()
+    if not conn:
+        return []
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT id_categorie, nom_categorie, description, seuil_min_defaut
+            FROM categorie
+            WHERE nom_categorie ILIKE %s
+            ORDER BY id_categorie DESC
+        """, (f"%{keyword}%",))
+        return cur.fetchall()
+    except Exception as e:
+        print("Erreur search_categories :", e)
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+# ===================== PRODUITS =====================
+
+def add_product(nom_produit, description, prix_unitaire, id_categorie, quantite_stock, seuil_min_personnalise, statut):
+    """
+    Ajoute un nouveau produit dans la base de données.
+    :param nom_produit: str
+    :param description: str
+    :param prix_unitaire: float
+    :param id_categorie: int
+    :param quantite_stock: int
+    :param seuil_min_personnalise: int ou None
+    :param statut: str (ACTIF ou INACTIF)
+    :return: id du produit ajouté ou None si erreur
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            INSERT INTO produit (nom_produit, description, prix_unitaire, id_categorie, quantite_stock, seuil_min_personnalise, statut)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id_produit
+        """, (nom_produit, description, prix_unitaire, id_categorie, quantite_stock, seuil_min_personnalise, statut))
+        product_id = cur.fetchone()[0]
+        conn.commit()
+        return product_id
+    except Exception as e:
+        print("Erreur add_product:", e)
+        conn.rollback()
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_all_products():
+    """
+    Récupère tous les produits de la base de données.
+    :return: liste de dicts contenant les informations des produits
+    """
+    conn = get_connection()
+    if not conn:
+        return []
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT p.id_produit, p.nom_produit, p.description, p.prix_unitaire, p.id_categorie, p.quantite_stock,
+                   p.seuil_min_personnalise, p.statut, p.date_ajout, c.nom_categorie
+            FROM produit p
+            JOIN categorie c ON p.id_categorie = c.id_categorie
+            ORDER BY p.id_produit DESC
+        """)
+        rows = cur.fetchall()
+        products = []
+        for row in rows:
+            products.append({
+                'id_produit': row[0],
+                'nom_produit': row[1],
+                'description': row[2],
+                'prix_unitaire': row[3],
+                'id_categorie': row[4],
+                'quantite_stock': row[5],
+                'seuil_min_personnalise': row[6],
+                'statut': row[7],
+                'date_ajout': row[8],
+                'nom_categorie': row[9]
+            })
+        return products
+    except Exception as e:
+        print("Erreur get_all_products:", e)
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def update_product(id_produit, nom_produit, description, prix_unitaire, id_categorie, quantite_stock, seuil_min_personnalise, statut):
+    """
+    Met à jour un produit existant.
+    :param id_produit: int
+    :param nom_produit: str
+    :param description: str
+    :param prix_unitaire: float
+    :param id_categorie: int
+    :param quantite_stock: int
+    :param seuil_min_personnalise: int ou None
+    :param statut: str (ACTIF ou INACTIF)
+    :return: True si succès, False sinon
+    """
+    conn = get_connection()
+    if not conn:
+        return False
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            UPDATE produit
+            SET nom_produit = %s, description = %s, prix_unitaire = %s, id_categorie = %s, quantite_stock = %s, 
+                seuil_min_personnalise = %s, statut = %s
+            WHERE id_produit = %s
+        """, (nom_produit, description, prix_unitaire, id_categorie, quantite_stock, seuil_min_personnalise, statut, id_produit))
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Erreur update_product:", e)
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
+def delete_product(id_produit):
+    """
+    Supprime un produit de la base de données.
+    :param id_produit: int
+    :return: True si succès, False sinon
+    """
+    conn = get_connection()
+    if not conn:
+        return False
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("DELETE FROM produit WHERE id_produit = %s", (id_produit,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Erreur delete_product:", e)
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_product_by_id(id_produit):
+    """
+    Récupère un produit par son ID.
+    :param id_produit: int
+    :return: dict contenant les informations du produit ou None si non trouvé
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT p.id_produit, p.nom_produit, p.description, p.prix_unitaire, p.id_categorie, p.quantite_stock,
+                   p.seuil_min_personnalise, p.statut, p.date_ajout, c.nom_categorie
+            FROM produit p
+            JOIN categorie c ON p.id_categorie = c.id_categorie
+            WHERE p.id_produit = %s
+        """, (id_produit,))
+        row = cur.fetchone()
+        if row:
+            return {
+                'id_produit': row[0],
+                'nom_produit': row[1],
+                'description': row[2],
+                'prix_unitaire': row[3],
+                'id_categorie': row[4],
+                'quantite_stock': row[5],
+                'seuil_min_personnalise': row[6],
+                'statut': row[7],
+                'date_ajout': row[8],
+                'nom_categorie': row[9]
+            }
+        return None
+    except Exception as e:
+        print("Erreur get_product_by_id:", e)
+        return None
+    finally:
+        cur.close()
+        conn.close()
 def authenticate_user(email, password):
     conn = get_connection()
     if not conn:

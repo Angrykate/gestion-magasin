@@ -37,7 +37,7 @@ class FournisseurFrame(tk.Frame):
         bar = tk.Frame(self, bg='white', padx=15, pady=8)
         bar.pack(fill=tk.X)
 
-        tk.Label(bar, text='Nom:', font=('times new roman', 12), bg='white').grid(row=0, column=0, padx=5)
+        tk.Label(bar, text='Nom', font=('times new roman', 12), bg='white').grid(row=0, column=0, padx=5)
         self.search_entry = tk.Entry(bar, width=30, bg='lightyellow')
         self.search_entry.grid(row=0, column=1, padx=8)
 
@@ -75,7 +75,6 @@ class FournisseurFrame(tk.Frame):
         self.id_entry.config(state='readonly')
 
         self.nom_entry = tk.Entry(self.form_frame, font=('times new roman', 12), width=30)
-        # Adresse: plus grand champ texte
         self.adresse_text = tk.Text(self.form_frame, font=('times new roman', 12), width=30, height=4)
 
         fields = [
@@ -167,7 +166,7 @@ class FournisseurFrame(tk.Frame):
             messagebox.showwarning("Attention", "Veuillez entrer un nom à rechercher")
             return
         self.tree.delete(*self.tree.get_children())
-        results = search_suppliers(keyword)  # pas besoin de 'nom'
+        results = search_suppliers(keyword)
         if not results:
             messagebox.showinfo("Info", "Aucun fournisseur trouvé")
             return
@@ -245,3 +244,5 @@ class FournisseurFrame(tk.Frame):
         self.id_entry.config(state='readonly')
         self.nom_entry.delete(0, tk.END)
         self.adresse_text.delete("1.0", tk.END)
+        for item in self.tree.selection():
+            self.tree.selection_remove(item)
