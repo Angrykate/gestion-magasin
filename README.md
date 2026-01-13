@@ -15,3 +15,11 @@ avec une base de données PostgreSQL.
 - PostgreSQL
 - pgAdmin
 - Git / GitHub
+
+⚠️ Configuration de la base de données
+
+Copier :
+db/db_config_example.py → db/db_config.py
+
+Puis modifier les identifiants PostgreSQL.
+
