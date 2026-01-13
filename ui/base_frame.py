@@ -1,5 +1,15 @@
 import tkinter as tk
 from datetime import datetime
+from ui.dashboard import DashboardFrame
+from ui.ventes import VentesFrame
+from ui.produits import ProduitsFrame
+from ui.categories import CategorieFrame
+from ui.fournisseurs import FournisseurFrame
+from ui.commandes import CommandeAchatFrame
+from ui.stock import StockFrame
+from ui.reçus import ReçusFrame
+from ui.rapports import RapportsFrame
+from ui.employe import EmployeFrame
 
 
 class BaseFrame(tk.Frame):
@@ -106,19 +116,50 @@ class BaseFrame(tk.Frame):
             bg='#009688',
         ).pack(fill=tk.X)
 
-        menus = [
-            "🏠 Dashboard", "👥 Employés", "🏭 Fournisseurs", "📁 Catégories",
-            "📦 Produits", "💰 Ventes", "📋 Commandes",
-            "📊 Stock", "🧾 Reçus", "📈 Rapports"
-        ]
+        MENU_CONFIG = {
+            "ADMIN": [
+                ("🏠 Dashboard", DashboardFrame),
+                ("👥 Employés", EmployeFrame),
+                ("🏭 Fournisseurs", FournisseurFrame),
+                ("📁 Catégories", CategorieFrame),
+                ("📦 Produits", ProduitsFrame),
+                ("💰 Ventes", VentesFrame),
+                ("📋 Commandes", CommandeAchatFrame),
+                ("📊 Stock", StockFrame),
+                ("🧾 Reçus", ReçusFrame),
+                ("📈 Rapports", RapportsFrame),
+            ],
 
-        for menu in menus:
+            "CAISSIER": [
+                ("🏠 Dashboard", DashboardFrame),
+                ("💰 Ventes", VentesFrame),
+                ("🧾 Reçus", ReçusFrame),
+            ],
+
+            "GESTIONNAIRE_STOCK": [
+                ("🏠 Dashboard", DashboardFrame),
+                ("📁 Catégories", CategorieFrame),
+                ("📦 Produits", ProduitsFrame),
+                ("📊 Stock", StockFrame),
+            ],
+
+            "RESPONSABLE_ACHAT": [
+                ("🏠 Dashboard", DashboardFrame),
+                ("🏭 Fournisseurs", FournisseurFrame),
+                ("📋 Commandes", CommandeAchatFrame),
+            ]
+        }
+
+        menus = MENU_CONFIG.get(self.user["role"], [])
+
+        for label, frame_class in menus:
             tk.Button(
                 sidebar,
-                text=menu,
+                text=label,
                 font=('times new roman', 19, 'bold'),
                 anchor='w',
-                cursor='hand2'
+                cursor='hand2',
+                command=lambda f=frame_class: self.show_page(f)
             ).pack(fill=tk.X)
 
     # ===================== CONTENT =====================
@@ -126,12 +167,15 @@ class BaseFrame(tk.Frame):
         self.content = tk.Frame(self, bg='#f5f6f8')
         self.content.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(
-            self.content,
-            text="Bienvenue sur le Dashboard",
-            font=('times new roman', 18, 'bold')
-        ).pack(pady=50)
-        print("Création du contenu BaseFrame")
+        self.current_page = None
+        self.show_page(DashboardFrame)
+
+    def show_page(self, frame_class):
+        for widget in self.content.winfo_children():
+            widget.destroy()
+
+        page = frame_class(self.content)
+        page.pack(fill=tk.BOTH, expand=True)
 
     # ===================== LOGOUT =====================
     def logout(self):

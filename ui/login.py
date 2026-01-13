@@ -149,5 +149,6 @@ class LoginFrame(tk.Frame):
     def forgot_password(self):
         messagebox.showinfo(
             "Mot de passe oublié",
-            "Veuillez contacter l'administrateur du système."
+            "Veuillez contacter l'administrateur du système\n"
+        "pour réinitialiser votre mot de passe."
         )
