@@ -1,5 +1,7 @@
 from db.connection import get_connection, get_cursor
 from psycopg2.extras import RealDictCursor
+from datetime import datetime
+
 
 # Exemple minimal pour l'insertion
 def fetch_all(query, params=None):
@@ -601,3 +603,119 @@ def authenticate_user(email, password):
     finally:
         cur.close()
         conn.close()
+
+# ===================== VENTES =====================
+
+def get_products_for_sale():
+    conn = get_connection()
+    cur = get_cursor(conn)
+
+    cur.execute("""
+        SELECT
+            id_produit,
+            nom_produit,
+            prix_unitaire,
+            quantite_stock
+        FROM produit
+        WHERE quantite_stock > 0
+        ORDER BY nom_produit
+    """)
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return rows
+
+def process_sale(panier, id_utilisateur):
+    """
+    panier = [
+        {
+            'id': int,
+            'quantité': int,
+            'prix_unitaire': float
+        }
+    ]
+    """
+
+    conn = get_connection()
+    if not conn:
+        return False, "Connexion BD impossible"
+
+    cur = conn.cursor()
+
+    try:
+        # =========================
+        # 1. Vérifier le stock
+        # =========================
+        for item in panier:
+            cur.execute(
+                "SELECT quantite_stock FROM produit WHERE id_produit = %s",
+                (item['id'],)
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise Exception("Produit introuvable")
+
+            stock_dispo = row[0]
+            if item['quantité'] > stock_dispo:
+                raise Exception(
+                    f"Stock insuffisant pour le produit ID {item['id']}"
+                )
+
+        # =========================
+        # 2. Calcul du total
+        # =========================
+        total_vente = sum(
+            item['quantité'] * item['prix_unitaire']
+            for item in panier
+        )
+
+        # =========================
+        # 3. Créer la vente
+        # =========================
+        cur.execute("""
+            INSERT INTO vente (total_vente, id_utilisateur)
+            VALUES (%s, %s)
+            RETURNING id_vente
+        """, (total_vente, id_utilisateur))
+
+        id_vente = cur.fetchone()[0]
+
+        # =========================
+        # 4. Lignes + stock
+        # =========================
+        for item in panier:
+            # ligne_vente
+            cur.execute("""
+                INSERT INTO ligne_vente
+                (id_vente, id_produit, quantite_vendue, prix_unitaire)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                id_vente,
+                item['id'],
+                item['quantité'],
+                item['prix_unitaire']
+            ))
+
+            # mise à jour stock
+            cur.execute("""
+                UPDATE produit
+                SET quantite_stock = quantite_stock - %s
+                WHERE id_produit = %s
+            """, (item['quantité'], item['id']))
+
+        conn.commit()
+        return True, id_vente
+
+    except Exception as e:
+        conn.rollback()
+        print("Erreur process_sale :", e)
+        return False, str(e)
+
+    finally:
+        cur.close()
+        conn.close()
+
+

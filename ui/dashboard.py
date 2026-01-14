@@ -2,7 +2,7 @@ import tkinter as tk
 
 
 class DashboardFrame(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent,user=None,go_dashboard=None):
         super().__init__(parent, bg='#e9ecef')
         self.pack(fill=tk.BOTH, expand=True)
 
@@ -45,7 +45,6 @@ class DashboardFrame(tk.Frame):
         frame.grid_rowconfigure(1, weight=2)
         frame.grid_columnconfigure(0, weight=1)
 
-        # TITRE (ligne 0)
         title_label = tk.Label(
             frame,
             text=title,
@@ -57,7 +56,6 @@ class DashboardFrame(tk.Frame):
         )
         title_label.grid(row=0, column=0, sticky='w', padx=15, pady=(10, 0))
 
-        # VALEUR (ligne 1)
         value_label = tk.Label(
             frame,
             text=value,

@@ -11,7 +11,7 @@ from db.models import (
 
 
 class ProduitsFrame(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent,user =None,go_dashboard=None):
         super().__init__(parent, bg='white')
         self.pack(fill=tk.BOTH, expand=True)
 

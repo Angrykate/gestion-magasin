@@ -1,5 +1,6 @@
 import tkinter as tk
 from datetime import datetime
+
 from ui.dashboard import DashboardFrame
 from ui.ventes import VentesFrame
 from ui.produits import ProduitsFrame
@@ -33,7 +34,6 @@ class BaseFrame(tk.Frame):
 
         self.title_image = tk.PhotoImage(file="assets/shop.png")
 
-        # Titre + logo (gauche, prend l'espace)
         tk.Label(
             header,
             image=self.title_image,
@@ -46,7 +46,6 @@ class BaseFrame(tk.Frame):
             padx=17
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Bloc infos utilisateur (à gauche du bouton)
         user_info = tk.Frame(header, bg='#010c48')
         user_info.pack(side=tk.LEFT, padx=20, pady=10)
 
@@ -55,8 +54,7 @@ class BaseFrame(tk.Frame):
             text=self.user["nom"],
             font=('times new roman', 14, 'bold'),
             bg='#010c48',
-            fg='white',
-            anchor='w'
+            fg='white'
         ).pack(anchor='w')
 
         tk.Label(
@@ -64,11 +62,9 @@ class BaseFrame(tk.Frame):
             text=self.user["role"],
             font=('times new roman', 11),
             bg='#010c48',
-            fg='#d1d5db',
-            anchor='w'
+            fg='#d1d5db'
         ).pack(anchor='w')
 
-        # Bouton déconnexion (TOUT À DROITE)
         tk.Button(
             header,
             text="Déconnexion",
@@ -105,15 +101,16 @@ class BaseFrame(tk.Frame):
 
     # ===================== SIDEBAR =====================
     def create_sidebar(self):
-        sidebar = tk.Frame(self, width=200)
-        sidebar.pack(side=tk.LEFT, fill=tk.Y)
-        sidebar.pack_propagate(False)
+        self.sidebar = tk.Frame(self, width=200)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
 
         tk.Label(
-            sidebar,
+            self.sidebar,
             text="Menu",
             font=('times new roman', 20),
             bg='#009688',
+            fg='white'
         ).pack(fill=tk.X)
 
         MENU_CONFIG = {
@@ -154,7 +151,7 @@ class BaseFrame(tk.Frame):
 
         for label, frame_class in menus:
             tk.Button(
-                sidebar,
+                self.sidebar,
                 text=label,
                 font=('times new roman', 19, 'bold'),
                 anchor='w',
@@ -167,15 +164,38 @@ class BaseFrame(tk.Frame):
         self.content = tk.Frame(self, bg='#f5f6f8')
         self.content.pack(fill=tk.BOTH, expand=True)
 
-        self.current_page = None
         self.show_page(DashboardFrame)
 
+    # ===================== NAVIGATION =====================
+
     def show_page(self, frame_class):
+        # Supprimer l'ancienne page
         for widget in self.content.winfo_children():
             widget.destroy()
 
-        page = frame_class(self.content)
+        # Réinitialiser la disposition complète
+        self.sidebar.pack_forget()
+        self.content.pack_forget()
+
+        # Cacher le menu
+        FULLSCREEN_PAGES = {VentesFrame,StockFrame}
+
+        if frame_class in FULLSCREEN_PAGES:
+
+            # Seulement le contenu (full screen)
+            self.content.pack(fill=tk.BOTH, expand=True)
+        else:
+            # Sidebar + contenu
+            self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+            self.content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        page = frame_class(
+            self.content,
+            user = self.user,
+            go_dashboard=lambda: self.show_page(DashboardFrame)
+        )
         page.pack(fill=tk.BOTH, expand=True)
+
 
     # ===================== LOGOUT =====================
     def logout(self):

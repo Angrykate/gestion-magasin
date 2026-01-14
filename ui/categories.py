@@ -8,7 +8,7 @@ from db.models import (
 )
 
 class CategorieFrame(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent,user=None,go_dashboard=None):
         super().__init__(parent, bg='#f8f9fa')
         self.pack(fill=tk.BOTH, expand=True)
 

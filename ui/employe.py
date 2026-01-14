@@ -11,7 +11,7 @@ from db.models import (
 
 
 class EmployeFrame(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent,user=None,go_dashboard=None):
         super().__init__(parent, bg='#f8f9fa')
         self.pack(fill=tk.BOTH, expand=True)
 
@@ -41,7 +41,7 @@ class EmployeFrame(tk.Frame):
 
         self.search_cb = ttk.Combobox(
             bar,
-            values=('Nom', 'Email', 'Rôle'),  # valeurs possibles
+            values=('Nom', 'Email', 'Rôle'),
             state='readonly',
             font=('times new roman',12),
             width=12
@@ -105,14 +105,12 @@ class EmployeFrame(tk.Frame):
 
         self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
 
-    # ===================== FORM =====================
     # ===================== FORMULAIRE =====================
     def create_form(self):
         form = tk.Frame(self, bg='white', padx=20, pady=12)
         form.pack(fill=tk.X, padx=15)
 
         # ===================== ENTRIES =====================
-        # Création des widgets si ce n'est pas déjà fait
         self.id_entry = tk.Entry(form, font=('times new roman', 12), width=30)
         self.id_entry.config(state='readonly')
 
@@ -128,7 +126,6 @@ class EmployeFrame(tk.Frame):
         )
         self.role_cb.set('Sélectionner un rôle')
 
-        # Champs et placement sur 2 colonnes
         fields = [
             ('ID', self.id_entry),
             ('Nom', self.nom_entry),
@@ -139,7 +136,7 @@ class EmployeFrame(tk.Frame):
 
         for i, (label_text, widget) in enumerate(fields):
             row = i // 2
-            col = (i % 2) * 2  # colonne du label
+            col = (i % 2) * 2
 
             tk.Label(
                 form,
