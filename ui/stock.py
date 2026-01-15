@@ -1,14 +1,17 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime, timedelta
+from db.models import get_connection, get_cursor
+from db.connection import get_connection, get_cursor
 
 
 class StockFrame(tk.Frame):
-    def __init__(self, parent,user=None, go_dashboard=None):
+    def __init__(self, parent, user=None, go_dashboard=None):
         super().__init__(parent, bg='#f5f6f8')
         self.pack(fill=tk.BOTH, expand=True)
 
         self.go_dashboard = go_dashboard
+        self.user = user
 
         self.create_title()
         self.create_stats_frame()
@@ -18,8 +21,16 @@ class StockFrame(tk.Frame):
         self.load_stats()
         self.load_stock_status()
         self.load_stock_history()
+        # Rafraîchissement automatique toutes les 30 secondes
+        self.refresh_all()
+        self.after(30000, self.auto_refresh)  # 30 secondes
 
-    # ===================== TITRE =====================
+    def auto_refresh(self):
+        """Rafraîchit automatiquement les données"""
+        self.refresh_all()
+        self.after(30000, self.auto_refresh)
+
+        # ===================== TITRE =====================
     def create_title(self):
         title_bar = tk.Frame(self, bg='#0f4d7d', height=50)
         title_bar.pack(fill=tk.X)
@@ -48,42 +59,48 @@ class StockFrame(tk.Frame):
         stats_frame = tk.Frame(self, bg='#f5f6f8')
         stats_frame.pack(fill=tk.X, padx=20, pady=10)
 
+        # Stocker les références aux labels de valeur
+        self.stat_labels = {}
+
         # Carte 1 : Total articles
-        total_card = self.create_stat_card(
+        self.total_card, label = self.create_stat_card(
             stats_frame,
             "Total articles en stock",
-            "1,245",
+            "0",
             "#0d6efd",
             "📊"
         )
-        total_card.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
+        self.total_card.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
+        self.stat_labels['total'] = label  # Stocke la référence
 
         # Carte 2 : Produits en alerte
-        alert_card = self.create_stat_card(
+        self.alert_card, label = self.create_stat_card(
             stats_frame,
             "Produits en alerte",
-            "18",
+            "0",
             "#dc3545",
             "⚠️"
         )
-        alert_card.grid(row=0, column=1, padx=5, pady=5, sticky='nsew')
+        self.alert_card.grid(row=0, column=1, padx=5, pady=5, sticky='nsew')
+        self.stat_labels['alerte'] = label
 
         # Carte 3 : Dernière mise à jour
-        update_card = self.create_stat_card(
+        self.update_card, label = self.create_stat_card(
             stats_frame,
             "Dernière mise à jour",
             datetime.now().strftime("%H:%M"),
             "#198754",
             "🕒"
         )
-        update_card.grid(row=0, column=2, padx=5, pady=5, sticky='nsew')
+        self.update_card.grid(row=0, column=2, padx=5, pady=5, sticky='nsew')
+        self.stat_labels['update'] = label
 
-        # Configurer les colonnes pour qu'elles s'étendent
+        # Configurer les colonnes
         for i in range(3):
             stats_frame.columnconfigure(i, weight=1)
 
     def create_stat_card(self, parent, title, value, color, icon):
-        """Crée une carte de statistique"""
+        """Crée une carte de statistique - retourne (frame, label)"""
         card = tk.Frame(parent, bg='white', bd=1, relief=tk.RIDGE)
 
         # Icône
@@ -96,13 +113,14 @@ class StockFrame(tk.Frame):
         ).pack(pady=(10, 0))
 
         # Valeur
-        tk.Label(
+        value_label = tk.Label(
             card,
             text=value,
             font=('times new roman', 22, 'bold'),
             bg='white',
             fg=color
-        ).pack(pady=5)
+        )
+        value_label.pack(pady=5)
 
         # Titre
         tk.Label(
@@ -114,8 +132,7 @@ class StockFrame(tk.Frame):
             wraplength=150
         ).pack(pady=(0, 10))
 
-        return card
-
+        return card, value_label  # Retourne le frame ET le label
     # ===================== CONTENU PRINCIPAL =====================
     def create_main_content(self):
         main_content = tk.Frame(self, bg='#f5f6f8')
@@ -200,6 +217,7 @@ class StockFrame(tk.Frame):
         # Tag pour les couleurs
         self.stock_tree.tag_configure('ok', background='#d4edda')
         self.stock_tree.tag_configure('alerte', background='#f8d7da')
+        self.stock_tree.tag_configure('rupture', background='#ffcccc')
 
         # ===== HISTORIQUE DES MOUVEMENTS (DROITE) =====
         history_frame = tk.Frame(top_frame, bg='white', bd=2, relief=tk.RIDGE)
@@ -328,35 +346,125 @@ class StockFrame(tk.Frame):
         self.full_history_tree.tag_configure('entree', foreground='#198754')
         self.full_history_tree.tag_configure('sortie', foreground='#dc3545')
 
-    # ===================== LOGIQUE =====================
+    # ===================== LOGIQUE - CONNEXION BD =====================
     def load_stats(self):
-        """Charge les statistiques"""
-        # Données d'exemple
-        total_articles = 1245
-        produits_alerte = 18
-        derniere_mise_a_jour = datetime.now().strftime("%d/%m %H:%M")
+        """Charge les statistiques depuis la vue SQL"""
+        conn = get_connection()
+        if not conn:
+            messagebox.showerror("Erreur", "Connexion BD impossible")
+            return
 
-        # Vous remplaceriez cela par des appels à votre base de données
-        print(f"Chargement des statistiques: {total_articles} articles, {produits_alerte} en alerte")
+        cur = get_cursor(conn)
+        try:
+            # 1. Total articles en stock
+            cur.execute("SELECT SUM(quantite_stock) FROM produit")
+            total_articles = cur.fetchone()['sum'] or 0
 
+            # 2. Produits en alerte (via vue_etat_stock)
+            cur.execute("""
+                SELECT COUNT(*) 
+                FROM vue_etat_stock 
+                WHERE etat IN ('ALERTE', 'RUPTURE')
+            """)
+            produits_alerte = cur.fetchone()['count'] or 0
+
+            # 3. Dernière mise à jour
+            cur.execute("""
+                SELECT MAX(date_mouvement) as derniere_maj 
+                FROM mouvement_stock
+            """)
+            derniere_maj = cur.fetchone()['derniere_maj']
+
+            # Mettre à jour l'interface
+            self.update_stats_ui(total_articles, produits_alerte, derniere_maj)
+
+        except Exception as e:
+            print(f"Erreur load_stats: {e}")
+            messagebox.showerror("Erreur", f"Impossible de charger les stats: {e}")
+        finally:
+            cur.close()
+            conn.close()
+
+    def update_stats_ui(self, total_articles, produits_alerte, derniere_maj):
+        """Met à jour l'affichage des statistiques"""
+        # Utiliser les labels stockés dans le dictionnaire
+        if 'total' in self.stat_labels:
+            self.stat_labels['total'].config(text=f"{total_articles:,}")
+
+        if 'alerte' in self.stat_labels:
+            self.stat_labels['alerte'].config(text=str(produits_alerte))
+
+        if 'update' in self.stat_labels:
+            if derniere_maj:
+                heure = derniere_maj.strftime("%H:%M")
+                self.stat_labels['update'].config(text=heure)
+            else:
+                self.stat_labels['update'].config(text="--:--")
     def load_stock_status(self):
-        """Charge l'état du stock"""
+        """Charge l'état du stock depuis la vue SQL"""
         self.stock_tree.delete(*self.stock_tree.get_children())
 
-        # Données d'exemple
+        conn = get_connection()
+        if not conn:
+            messagebox.showerror("Erreur", "Connexion BD impossible")
+            return
+
+        cur = get_cursor(conn)
+        try:
+            # Utiliser la vue vue_etat_stock
+            cur.execute("""
+                SELECT * FROM vue_etat_stock 
+                ORDER BY 
+                    CASE etat 
+                        WHEN 'RUPTURE' THEN 1
+                        WHEN 'ALERTE' THEN 2
+                        ELSE 3
+                    END,
+                    quantite_stock ASC
+            """)
+
+            produits = cur.fetchall()
+
+            for prod in produits:
+                # Déterminer le tag (couleur)
+                if prod['etat'] == 'RUPTURE':
+                    tag = 'rupture'
+                    statut_display = 'RUPTURE'
+                elif prod['etat'] == 'ALERTE':
+                    tag = 'alerte'
+                    statut_display = 'ALERTE'
+                else:
+                    tag = 'ok'
+                    statut_display = 'OK'
+
+                self.stock_tree.insert(
+                    '',
+                    tk.END,
+                    values=(
+                        prod['id_produit'],
+                        prod['nom'],
+                        prod['categorie'],
+                        prod['quantite_stock'],
+                        prod['seuil_min'],
+                        statut_display
+                    ),
+                    tags=(tag,)
+                )
+
+        except Exception as e:
+            print(f"Erreur load_stock_status: {e}")
+            # Fallback sur les données d'exemple si la vue n'existe pas
+            self.load_stock_status_fallback()
+        finally:
+            cur.close()
+            conn.close()
+
+    def load_stock_status_fallback(self):
+        """Fallback si la vue n'existe pas encore"""
         produits_exemple = [
             (1, 'Coca-Cola 2L', 'Boissons', 45, 10, 'OK'),
             (2, 'Pain Blanc', 'Boulangerie', 5, 15, 'ALERTE'),
             (3, 'Lait Frais 1L', 'Produits Laitiers', 28, 20, 'OK'),
-            (4, 'Eau Minérale 1.5L', 'Boissons', 120, 30, 'OK'),
-            (5, 'Fromage 200g', 'Produits Laitiers', 3, 10, 'ALERTE'),
-            (6, 'Jus d\'Orange 1L', 'Boissons', 8, 15, 'ALERTE'),
-            (7, 'Croissant', 'Boulangerie', 40, 20, 'OK'),
-            (8, 'Yaourt Nature', 'Produits Laitiers', 50, 15, 'OK'),
-            (9, 'Pommes 1kg', 'Fruits', 35, 10, 'OK'),
-            (10, 'Pâtes 500g', 'Épicerie', 60, 25, 'OK'),
-            (11, 'Riz 1kg', 'Épicerie', 2, 10, 'ALERTE'),
-            (12, 'Café 250g', 'Épicerie', 25, 5, 'OK'),
         ]
 
         for prod in produits_exemple:
@@ -371,38 +479,105 @@ class StockFrame(tk.Frame):
             )
 
     def load_stock_history(self):
-        """Charge l'historique des mouvements"""
+        """Charge l'historique des mouvements depuis la table mouvement_stock"""
         self.history_tree.delete(*self.history_tree.get_children())
         self.full_history_tree.delete(*self.full_history_tree.get_children())
 
-        # Données d'exemple pour l'historique
-        mouvements_exemple = [
-            ('13/01 14:30', 'Coca-Cola 2L', 'Entrée', 50, 'Commande #450', 'Jean Dupont'),
-            ('13/01 14:25', 'Pain Blanc', 'Sortie', 10, 'Vente #789', 'Marie Curie'),
-            ('13/01 13:45', 'Lait Frais 1L', 'Sortie', 5, 'Vente #788', 'Pierre Martin'),
-            ('13/01 12:30', 'Fromage 200g', 'Entrée', 20, 'Commande #449', 'Jean Dupont'),
-            ('13/01 11:15', 'Jus d\'Orange 1L', 'Sortie', 8, 'Vente #787', 'Marie Curie'),
-            ('12/01 16:20', 'Eau Minérale 1.5L', 'Entrée', 100, 'Commande #448', 'Jean Dupont'),
-            ('12/01 15:10', 'Croissant', 'Sortie', 15, 'Vente #786', 'Pierre Martin'),
-            ('12/01 14:05', 'Yaourt Nature', 'Sortie', 12, 'Vente #785', 'Marie Curie'),
-            ('12/01 11:30', 'Pommes 1kg', 'Entrée', 40, 'Commande #447', 'Jean Dupont'),
-            ('11/01 17:15', 'Pâtes 500g', 'Sortie', 25, 'Vente #784', 'Pierre Martin'),
-        ]
+        conn = get_connection()
+        if not conn:
+            messagebox.showerror("Erreur", "Connexion BD impossible")
+            return
 
-        for i, mouvement in enumerate(mouvements_exemple):
-            date, produit, type_mvt, quantite, origine, utilisateur = mouvement
-            tag = 'entree' if type_mvt == 'Entrée' else 'sortie'
+        cur = get_cursor(conn)
+        try:
+            # Récupérer les mouvements avec jointures
+            cur.execute("""
+                SELECT 
+                    m.date_mouvement,
+                    p.nom_produit,
+                    m.type_mouvement,
+                    m.quantite,
+                    u.nom as utilisateur,
+                    CASE 
+                        WHEN m.id_vente IS NOT NULL THEN 'Vente #' || m.id_vente
+                        WHEN m.id_commande_achat IS NOT NULL THEN 'Commande #' || m.id_commande_achat
+                        ELSE 'Ajustement'
+                    END as origine
+                FROM mouvement_stock m
+                JOIN produit p ON m.id_produit = p.id_produit
+                JOIN utilisateur u ON m.id_utilisateur = u.id_utilisateur
+                ORDER BY m.date_mouvement DESC
+                LIMIT 50
+            """)
 
-            # Historique filtré (premier treeview)
-            if i < 5:  # Afficher seulement les 5 premiers dans l'historique
-                self.history_tree.insert(
+            mouvements = cur.fetchall()
+
+            for i, mvt in enumerate(mouvements):
+                date_str = mvt['date_mouvement'].strftime("%d/%m %H:%M")
+                type_mvt = mvt['type_mouvement']
+                quantite = mvt['quantite']
+
+                # Déterminer le tag
+                tag = 'entree' if type_mvt.upper() in ['ENTREE', 'AJOUT', 'RECEPTION'] else 'sortie'
+                type_display = 'Entrée' if tag == 'entree' else 'Sortie'
+
+                # Historique filtré (top 10)
+                if i < 10:
+                    self.history_tree.insert(
+                        '',
+                        tk.END,
+                        values=(
+                            date_str,
+                            mvt['nom_produit'],
+                            type_display,
+                            quantite,
+                            mvt['origine'],
+                            mvt['utilisateur']
+                        ),
+                        tags=(tag,)
+                    )
+
+                # Historique complet (50 derniers)
+                self.full_history_tree.insert(
                     '',
                     tk.END,
-                    values=(date, produit, type_mvt, quantite, origine, utilisateur),
+                    values=(
+                        date_str,
+                        mvt['nom_produit'],
+                        type_display,
+                        quantite,
+                        mvt['origine'],
+                        mvt['utilisateur']
+                    ),
                     tags=(tag,)
                 )
 
-            # Historique complet (deuxième treeview)
+        except Exception as e:
+            print(f"Erreur load_stock_history: {e}")
+            # Fallback sur les données d'exemple
+            self.load_stock_history_fallback()
+        finally:
+            cur.close()
+            conn.close()
+
+    def load_stock_history_fallback(self):
+        """Fallback si pas de données"""
+        mouvements_exemple = [
+            ('13/01 14:30', 'Coca-Cola 2L', 'Entrée', 50, 'Commande #450', 'Jean Dupont'),
+            ('13/01 14:25', 'Pain Blanc', 'Sortie', 10, 'Vente #789', 'Marie Curie'),
+        ]
+
+        for mouvement in mouvements_exemple:
+            date, produit, type_mvt, quantite, origine, utilisateur = mouvement
+            tag = 'entree' if type_mvt == 'Entrée' else 'sortie'
+
+            self.history_tree.insert(
+                '',
+                tk.END,
+                values=(date, produit, type_mvt, quantite, origine, utilisateur),
+                tags=(tag,)
+            )
+
             self.full_history_tree.insert(
                 '',
                 tk.END,
@@ -413,8 +588,74 @@ class StockFrame(tk.Frame):
     def filter_history(self):
         """Filtre l'historique selon la période sélectionnée"""
         periode = self.period_var.get()
-        print(f"Filtrage de l'historique pour: {periode}")
-        # Vous implémenteriez ici la logique de filtrage par période
+
+        conn = get_connection()
+        if not conn:
+            return
+
+        cur = get_cursor(conn)
+        try:
+            # Déterminer la date de début selon la période
+            if periode == '7j':
+                date_limit = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+                where_clause = f"WHERE m.date_mouvement >= '{date_limit}'"
+            elif periode == '30j':
+                date_limit = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                where_clause = f"WHERE m.date_mouvement >= '{date_limit}'"
+            else:
+                where_clause = ""
+
+            query = f"""
+                SELECT 
+                    m.date_mouvement,
+                    p.nom_produit,
+                    m.type_mouvement,
+                    m.quantite,
+                    u.nom as utilisateur,
+                    CASE 
+                        WHEN m.id_vente IS NOT NULL THEN 'Vente #' || m.id_vente
+                        WHEN m.id_commande_achat IS NOT NULL THEN 'Commande #' || m.id_commande_achat
+                        ELSE 'Ajustement'
+                    END as origine
+                FROM mouvement_stock m
+                JOIN produit p ON m.id_produit = p.id_produit
+                JOIN utilisateur u ON m.id_utilisateur = u.id_utilisateur
+                {where_clause}
+                ORDER BY m.date_mouvement DESC
+                LIMIT 20
+            """
+
+            cur.execute(query)
+            mouvements = cur.fetchall()
+
+            # Mettre à jour le treeview
+            self.history_tree.delete(*self.history_tree.get_children())
+
+            for mvt in mouvements:
+                date_str = mvt['date_mouvement'].strftime("%d/%m %H:%M")
+                type_mvt = mvt['type_mouvement']
+                tag = 'entree' if type_mvt.upper() in ['ENTREE', 'AJOUT', 'RECEPTION'] else 'sortie'
+                type_display = 'Entrée' if tag == 'entree' else 'Sortie'
+
+                self.history_tree.insert(
+                    '',
+                    tk.END,
+                    values=(
+                        date_str,
+                        mvt['nom_produit'],
+                        type_display,
+                        mvt['quantite'],
+                        mvt['origine'],
+                        mvt['utilisateur']
+                    ),
+                    tags=(tag,)
+                )
+
+        except Exception as e:
+            print(f"Erreur filter_history: {e}")
+        finally:
+            cur.close()
+            conn.close()
 
     def refresh_all(self):
         """Rafraîchit toutes les données"""

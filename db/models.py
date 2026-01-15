@@ -617,7 +617,7 @@ def get_products_for_sale():
             prix_unitaire,
             quantite_stock
         FROM produit
-        WHERE quantite_stock > 0
+        WHERE quantite_stock > 0 AND statut = 'ACTIF'
         ORDER BY nom_produit
     """)
 
@@ -700,11 +700,11 @@ def process_sale(panier, id_utilisateur):
             ))
 
             # mise à jour stock
-            cur.execute("""
-                UPDATE produit
-                SET quantite_stock = quantite_stock - %s
-                WHERE id_produit = %s
-            """, (item['quantité'], item['id']))
+            # cur.execute("""
+            #     UPDATE produit
+            #     SET quantite_stock = quantite_stock - %s
+            #     WHERE id_produit = %s
+            # """, (item['quantité'], item['id']))
 
         conn.commit()
         return True, id_vente
@@ -719,3 +719,212 @@ def process_sale(panier, id_utilisateur):
         conn.close()
 
 
+# ===================== STOCK =====================
+def get_stock_stats():
+    """Récupère les statistiques du stock"""
+    conn = get_connection()
+    if not conn:
+        return None
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT 
+                SUM(quantite_stock) as total_articles,
+                COUNT(CASE WHEN quantite_stock <= 0 THEN 1 END) as produits_rupture
+            FROM produit
+        """)
+        return cur.fetchone()
+    except Exception as e:
+        print(f"Erreur get_stock_stats: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_stock_alerts():
+    """Récupère les produits en alerte de stock"""
+    conn = get_connection()
+    if not conn:
+        return []
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT 
+                p.id_produit,
+                p.nom_produit,
+                c.nom_categorie,
+                p.quantite_stock,
+                COALESCE(p.seuil_min_personnalise, c.seuil_min_defaut) as seuil_min,
+                CASE 
+                    WHEN p.quantite_stock <= 0 THEN 'RUPTURE'
+                    WHEN p.quantite_stock <= COALESCE(p.seuil_min_personnalise, c.seuil_min_defaut) THEN 'ALERTE'
+                    ELSE 'OK'
+                END as statut
+            FROM produit p
+            JOIN categorie c ON p.id_categorie = c.id_categorie
+            WHERE p.quantite_stock <= COALESCE(p.seuil_min_personnalise, c.seuil_min_defaut)
+            ORDER BY p.quantite_stock ASC
+        """)
+        return cur.fetchall()
+    except Exception as e:
+        print(f"Erreur get_stock_alerts: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_stock_movements(limit=50):
+    """Récupère les mouvements de stock récents"""
+    conn = get_connection()
+    if not conn:
+        return []
+
+    cur = get_cursor(conn)
+    try:
+        cur.execute("""
+            SELECT 
+                m.date_mouvement,
+                p.nom_produit,
+                m.type_mouvement,
+                m.quantite,
+                u.nom as utilisateur,
+                CASE 
+                    WHEN m.id_vente IS NOT NULL THEN 'Vente #' || m.id_vente
+                    WHEN m.id_commande_achat IS NOT NULL THEN 'Commande #' || m.id_commande_achat
+                    ELSE 'Ajustement'
+                END as origine
+            FROM mouvement_stock m
+            JOIN produit p ON m.id_produit = p.id_produit
+            JOIN utilisateur u ON m.id_utilisateur = u.id_utilisateur
+            ORDER BY m.date_mouvement DESC
+            LIMIT %s
+        """, (limit,))
+        return cur.fetchall()
+    except Exception as e:
+        print(f"Erreur get_stock_movements: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ===================== COMMANDES D'ACHAT =====================
+def create_commande_achat(id_fournisseur, id_utilisateur, lignes):
+    """
+    Crée une commande d'achat avec ses lignes
+    lignes = [
+        {'id_produit': X, 'quantite': Y, 'prix_unitaire': Z},
+        ...
+    ]
+    """
+    conn = get_connection()
+    if not conn:
+        return None, "Connexion BD impossible"
+
+    cur = get_cursor(conn)
+
+    try:
+        # 1. Créer la commande
+        cur.execute("""
+            INSERT INTO commande_achat (id_fournisseur, id_utilisateur, statut)
+            VALUES (%s, %s, 'EN_COURS')
+            RETURNING id_commande_achat
+        """, (id_fournisseur, id_utilisateur))
+
+        commande_id = cur.fetchone()['id_commande_achat']
+
+        # 2. Ajouter les lignes
+        for ligne in lignes:
+            cur.execute("""
+                INSERT INTO ligne_commande_achat 
+                (id_commande_achat, id_produit, quantite_commandee, prix_unitaire)
+                VALUES (%s, %s, %s, %s)
+            """, (commande_id, ligne['id_produit'], ligne['quantite'], ligne['prix_unitaire']))
+
+        conn.commit()
+        return commande_id, None
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Erreur create_commande_achat: {e}")
+        return None, str(e)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_commande_details(commande_id):
+    """Récupère les détails d'une commande"""
+    conn = get_connection()
+    if not conn:
+        return None
+
+    cur = get_cursor(conn)
+
+    try:
+        # Infos commande
+        cur.execute("""
+            SELECT 
+                c.*,
+                f.nom_fournisseur,
+                u.nom as createur
+            FROM commande_achat c
+            JOIN fournisseur f ON c.id_fournisseur = f.id_fournisseur
+            JOIN utilisateur u ON c.id_utilisateur = u.id_utilisateur
+            WHERE c.id_commande_achat = %s
+        """, (commande_id,))
+
+        commande = cur.fetchone()
+
+        if commande:
+            # Lignes
+            cur.execute("""
+                SELECT 
+                    lc.*,
+                    p.nom_produit
+                FROM ligne_commande_achat lc
+                JOIN produit p ON lc.id_produit = p.id_produit
+                WHERE lc.id_commande_achat = %s
+            """, (commande_id,))
+
+            commande['lignes'] = cur.fetchall()
+
+        return commande
+
+    except Exception as e:
+        print(f"Erreur get_commande_details: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+
+def update_commande_statut(commande_id, nouveau_statut):
+    """Met à jour le statut d'une commande"""
+    conn = get_connection()
+    if not conn:
+        return False
+
+    cur = get_cursor(conn)
+
+    try:
+        cur.execute("""
+            UPDATE commande_achat 
+            SET statut = %s
+            WHERE id_commande_achat = %s
+        """, (nouveau_statut, commande_id))
+
+        conn.commit()
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Erreur update_commande_statut: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()

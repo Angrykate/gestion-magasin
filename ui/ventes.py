@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from db.models import get_products_for_sale, process_sale
+from db.models import get_connection, get_cursor
 
 class VentesFrame(tk.Frame):
     def __init__(self, parent,user=None, go_dashboard=None):
@@ -409,35 +410,30 @@ class VentesFrame(tk.Frame):
                 values=(
                     prod['id_produit'],
                     prod['nom_produit'],
-                    prod['prix_unitaire'],
+                    float(prod['prix_unitaire']),
                     prod['quantite_stock']
                 )
             )
 
     def search_product(self):
         keyword = self.search_entry.get().strip().lower()
-
         self.products_tree.delete(*self.products_tree.get_children())
-
         products = get_products_for_sale()
 
         for prod in products:
-            if (
-                    keyword in prod['nom_produit'].lower()
-                    or keyword in str(prod['id_produit'])
-                    or keyword in f"{prod['prix_unitaire']}"
-            ):
+            if (keyword in prod['nom_produit'].lower() or
+                    keyword in str(prod['id_produit']) or
+                    keyword in str(prod['prix_unitaire']).lower()):
                 self.products_tree.insert(
                     '',
                     tk.END,
                     values=(
                         prod['id_produit'],
                         prod['nom_produit'],
-                        f"{prod['prix_unitaire']:.2f}",
+                        float(prod['prix_unitaire']),
                         prod['quantite_stock']
                     )
                 )
-
     def on_product_select(self, event):
         """Gère la sélection d'un produit"""
         selected = self.products_tree.focus()
@@ -584,10 +580,12 @@ class VentesFrame(tk.Frame):
         )
 
         if success:
-            messagebox.showinfo(
-                "Succès",
-                f"Vente validée avec succès\nID Vente : {result}"
-            )
+            # Générer et afficher le reçu immédiatement
+            receipt_text = self.generate_receipt_text(result)
+
+            # Afficher dans une fenêtre popup
+            self.show_receipt_popup(receipt_text, result)
+
             self.panier = []
             self.update_cart_display()
             self.clear_selection()
@@ -595,3 +593,100 @@ class VentesFrame(tk.Frame):
         else:
             messagebox.showerror("Erreur", result)
 
+    def generate_receipt_text(self, sale_id):
+        """Génère le texte du reçu"""
+        conn = get_connection()
+        cur = get_cursor(conn)
+
+        # Récupérer les infos de la vente
+        cur.execute("""
+            SELECT v.*, u.nom as vendeur
+            FROM vente v
+            JOIN utilisateur u ON v.id_utilisateur = u.id_utilisateur
+            WHERE v.id_vente = %s
+        """, (sale_id,))
+
+        sale_info = cur.fetchone()
+
+        cur.execute("""
+            SELECT p.nom_produit, lv.quantite_vendue, lv.prix_unitaire
+            FROM ligne_vente lv
+            JOIN produit p ON lv.id_produit = p.id_produit
+            WHERE lv.id_vente = %s
+        """, (sale_id,))
+
+        items = cur.fetchall()
+
+        # Construire le reçu
+        lines = []
+        lines.append("=" * 40)
+        lines.append("         REÇU DE VENTE")
+        lines.append("=" * 40)
+        lines.append(f"Vente N° : {sale_id}")
+        lines.append(f"Date     : {sale_info['date_vente'].strftime('%Y-%m-%d %H:%M')}")
+        lines.append(f"Vendeur  : {sale_info['vendeur']}")
+        lines.append("-" * 40)
+        lines.append(f"{'Produit':<20} {'Qté':>5} {'PU':>8} {'Total':>10}")
+        lines.append("-" * 40)
+
+        total = 0
+        for item in items:
+            nom = item['nom_produit'][:19]
+            qte = item['quantite_vendue']
+            pu = item['prix_unitaire']
+            ligne_total = qte * pu
+            total += ligne_total
+
+            lines.append(f"{nom:<20} {qte:>5} {pu:>8.2f} {ligne_total:>10.2f}")
+
+        lines.append("-" * 40)
+        lines.append(f"{'TOTAL À PAYER :':<33} {total:>10.2f} €")
+        lines.append("=" * 40)
+        lines.append("Merci pour votre confiance !")
+        lines.append("=" * 40)
+
+        cur.close()
+        conn.close()
+
+        return "\n".join(lines)
+
+    def show_receipt_popup(self, receipt_text, sale_id):
+        """Affiche le reçu dans une popup"""
+        popup = tk.Toplevel()
+        popup.title(f"Reçu Vente #{sale_id}")
+        popup.geometry("500x600")
+
+        # Text widget pour afficher
+        text_widget = tk.Text(popup, font=('Courier', 10), width=60, height=30)
+        text_widget.pack(padx=10, pady=10)
+        text_widget.insert(tk.END, receipt_text)
+        text_widget.config(state='disabled')
+
+        # Boutons
+        button_frame = tk.Frame(popup)
+        button_frame.pack(pady=10)
+
+        tk.Button(
+            button_frame,
+            text="📄 Sauvegarder TXT",
+            command=lambda: self.save_receipt_txt(receipt_text, sale_id)
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            button_frame,
+            text="Fermer",
+            command=popup.destroy
+        ).pack(side=tk.LEFT, padx=5)
+
+    def save_receipt_txt(self, receipt_text, sale_id):
+        """Sauvegarde le reçu en TXT"""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Fichiers texte", "*.txt")],
+            initialfile=f"recu_vente_{sale_id}.txt"
+        )
+
+        if file_path:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(receipt_text)
+            messagebox.showinfo("Succès", f"Reçu sauvegardé sous:\n{file_path}")
