@@ -468,6 +468,20 @@ class RapportsFrame(tk.Frame):
 
     # ===================== ONGLET 4: EMPLOYÉS =====================
     def create_tab_employes(self):
+        # ===== STATISTIQUES =====
+        stats_frame = tk.Frame(self.tab_employes, bg='#f5f6f8')
+        stats_frame.pack(fill=tk.X, padx=20, pady=(10, 5))
+
+        # Nombre total d'employés
+        self.total_employe_card = self.create_stat_card(
+            stats_frame,
+            "Total Employés",
+            "0",
+            "#0d6efd",
+            "👥"
+        )
+        self.total_employe_card.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
+
         # ===== TABLEAU PERFORMANCE =====
         table_frame = tk.Frame(self.tab_employes, bg='#f5f6f8')
         table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)

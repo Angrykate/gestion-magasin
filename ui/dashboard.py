@@ -142,18 +142,20 @@ class DashboardFrame(tk.Frame):
         # Zone pour le tableau des dernières ventes
         self.recent_sales_tree = ttk.Treeview(
             self.right_chart_frame,
-            columns=('ID', 'Heure', 'Montant'),
+            columns=('ID', 'Vendeur', 'Heure', 'Montant'),
             show='headings',
             height=8
         )
         self.recent_sales_tree.place(x=10, y=50, width=480, height=200)
 
         # Configuration des colonnes
-        self.recent_sales_tree.heading('ID', text='N° Vente')
+        self.recent_sales_tree.heading('ID', text='N°')
+        self.recent_sales_tree.heading('Vendeur', text='Vendeur')
         self.recent_sales_tree.heading('Heure', text='Heure')
         self.recent_sales_tree.heading('Montant', text='Montant')
-        self.recent_sales_tree.column('ID', width=100, anchor='center')
-        self.recent_sales_tree.column('Heure', width=150, anchor='center')
+        self.recent_sales_tree.column('ID', width=50, anchor='center')
+        self.recent_sales_tree.column('Vendeur', width=150, anchor='w')
+        self.recent_sales_tree.column('Heure', width=100, anchor='center')
         self.recent_sales_tree.column('Montant', width=150, anchor='center')
 
     # ===================== ACCÈS RAPIDE =====================
@@ -173,44 +175,40 @@ class DashboardFrame(tk.Frame):
             bg='white'
         ).place(x=10, y=5)
 
-        # Bouton Ajouter un produit
-        tk.Button(
-            frame,
-            text="Ajouter un produit",
-            bg='#0d6efd',
-            fg='white',
-            font=('times new roman', 13, 'bold'),
-            bd=0,
-            padx=15,
-            cursor='hand2',
-            command=self.go_to_produits
-        ).place(x=120, y=15)
+        role = self.user['role']
+        
+        # Helper pour créer un bouton
+        def add_btn(text, color, x_pos, command):
+            tk.Button(
+                frame,
+                text=text,
+                bg=color,
+                fg='white',
+                font=('times new roman', 13, 'bold'),
+                bd=0,
+                padx=15,
+                cursor='hand2',
+                command=command
+            ).place(x=x_pos, y=15)
 
-        # Bouton Passer une vente
-        tk.Button(
-            frame,
-            text="Passer une vente",
-            bg='#198754',
-            fg='white',
-            font=('times new roman', 13, 'bold'),
-            bd=0,
-            padx=15,
-            cursor='hand2',
-            command=self.go_to_ventes
-        ).place(x=360, y=15)
+        # Logique selon le rôle
+        if role == 'ADMIN':
+            add_btn("Ajouter un produit", '#0d6efd', 120, self.go_to_produits)
+            add_btn("Passer une vente", '#198754', 360, self.go_to_ventes)
+            add_btn("Voir rapports", '#343a40', 600, self.go_to_rapports)
 
-        # Bouton Voir rapports
-        tk.Button(
-            frame,
-            text="Voir rapports",
-            bg='#343a40',
-            fg='white',
-            font=('times new roman', 13, 'bold'),
-            bd=0,
-            padx=15,
-            cursor='hand2',
-            command=self.go_to_rapports
-        ).place(x=600, y=15)
+        elif role == 'CAISSIER':
+            add_btn("Passer une vente", '#198754', 120, self.go_to_ventes)
+            add_btn("Mes Reçus", '#6c757d', 360, self.go_to_recus)
+        
+        elif role == 'GESTIONNAIRE_STOCK':
+             add_btn("Ajouter un produit", '#0d6efd', 120, self.go_to_produits)
+             add_btn("Gérer Catégories", '#6610f2', 360, self.go_to_categories)
+             add_btn("Voir Stock", '#fd7e14', 600, self.go_to_stock)
+        
+        elif role == 'RESPONSABLE_ACHAT':
+            add_btn("Fournisseurs", '#0d6efd', 120, self.go_to_fournisseurs)
+            add_btn("Commandes", '#198754', 360, self.go_to_commandes)
 
     # ===================== CHARGEMENT DES DONNÉES =====================
     def load_dashboard_data(self):
@@ -222,37 +220,52 @@ class DashboardFrame(tk.Frame):
                 return
 
             cur = get_cursor(conn)
+            
+            is_admin = (self.user['role'] == 'ADMIN')
+            user_id = self.user['id_utilisateur']
 
             # 1. Chiffre d'affaires du jour
-            cur.execute("""
+            query_ca = """
                 SELECT COALESCE(SUM(total_vente), 0) as ca_jour
                 FROM vente 
                 WHERE DATE(date_vente) = CURRENT_DATE
-            """)
+            """
+            params_ca = []
+            
+            if not is_admin:
+                query_ca += " AND id_utilisateur = %s"
+                params_ca.append(user_id)
+            
+            cur.execute(query_ca, tuple(params_ca))
             ca_result = cur.fetchone()
             if ca_result:
                 self.update_kpi('ca_jour', f"{ca_result['ca_jour']:,.2f} FCFA")
 
             # 2. Nombre de ventes du jour
-            cur.execute("""
+            query_nb = """
                 SELECT COUNT(*) as ventes_jour
                 FROM vente 
                 WHERE DATE(date_vente) = CURRENT_DATE
-            """)
+            """
+            params_nb = []
+            
+            if not is_admin:
+                query_nb += " AND id_utilisateur = %s"
+                params_nb.append(user_id)
+
+            cur.execute(query_nb, tuple(params_nb))
             ventes_result = cur.fetchone()
             if ventes_result:
                 self.update_kpi('ventes_jour', str(ventes_result['ventes_jour']))
 
-            # 3. Produits en seuil bas (stock <= seuil minimum)
+            # 3. Produits en seuil bas (GLOBAL)
             try:
-                # Essayer d'abord avec la vue si elle existe
                 cur.execute("""
                     SELECT COUNT(*) as alertes
                     FROM vue_etat_stock 
                     WHERE etat IN ('RUPTURE', 'ALERTE')
                 """)
             except:
-                # Fallback si la vue n'existe pas
                 cur.execute("""
                     SELECT COUNT(*) as alertes
                     FROM produit p
@@ -265,7 +278,7 @@ class DashboardFrame(tk.Frame):
             if alertes_result:
                 self.update_kpi('alertes_stock', str(alertes_result['alertes']))
 
-            # 4. Nombre total de produits actifs
+            # 4. Nombre total de produits actifs (GLOBAL)
             cur.execute("""
                 SELECT COUNT(*) as total
                 FROM produit 
@@ -289,45 +302,43 @@ class DashboardFrame(tk.Frame):
                 return
 
             cur = get_cursor(conn)
+            
+            is_admin = (self.user['role'] == 'ADMIN')
+            user_id = self.user['id_utilisateur']
 
             # 1. TOP 5 PRODUITS VENDUS (30 derniers jours)
             self.top_products_tree.delete(*self.top_products_tree.get_children())
 
-            try:
-                # Essayer avec la vue si elle existe
-                cur.execute("""
-                    SELECT nom, quantite_vendue 
-                    FROM vue_top_produits 
-                    ORDER BY quantite_vendue DESC 
-                    LIMIT 5
-                """)
-            except:
-                # Fallback si la vue n'existe pas
-                cur.execute("""
-                    SELECT 
-                        p.nom_produit as nom,
-                        COALESCE(SUM(lv.quantite_vendue), 0) as quantite_vendue
-                    FROM produit p
-                    LEFT JOIN ligne_vente lv ON p.id_produit = lv.id_produit
-                    LEFT JOIN vente v ON lv.id_vente = v.id_vente
-                    WHERE v.date_vente >= CURRENT_DATE - INTERVAL '30 days'
-                    OR v.date_vente IS NULL
-                    GROUP BY p.id_produit, p.nom_produit
-                    ORDER BY quantite_vendue DESC
-                    LIMIT 5
-                """)
-
+            query_top = """
+                SELECT 
+                    p.nom_produit as nom,
+                    COALESCE(SUM(lv.quantite_vendue), 0) as quantite_vendue
+                FROM produit p
+                LEFT JOIN ligne_vente lv ON p.id_produit = lv.id_produit
+                LEFT JOIN vente v ON lv.id_vente = v.id_vente
+                WHERE (v.date_vente >= CURRENT_DATE - INTERVAL '30 days' OR v.date_vente IS NULL)
+            """
+            params_top = []
+            
+            if not is_admin:
+                query_top += " AND v.id_utilisateur = %s"
+                params_top.append(user_id)
+            
+            query_top += """
+                GROUP BY p.id_produit, p.nom_produit
+                ORDER BY quantite_vendue DESC
+                LIMIT 5
+            """
+            
+            # Si Admin et si vue existe, on pourrait optimiser, mais la query manuelle est sûre.
+            cur.execute(query_top, tuple(params_top))
             top_products = cur.fetchall()
 
             for i, product in enumerate(top_products, 1):
-                # Ajouter un emoji pour les 3 premiers
                 prefix = ""
-                if i == 1:
-                    prefix = "🥇 "
-                elif i == 2:
-                    prefix = "🥈 "
-                elif i == 3:
-                    prefix = "🥉 "
+                if i == 1: prefix = "🥇 "
+                elif i == 2: prefix = "🥈 "
+                elif i == 3: prefix = "🥉 "
 
                 self.top_products_tree.insert(
                     '',
@@ -341,17 +352,25 @@ class DashboardFrame(tk.Frame):
             # 2. DERNIÈRES VENTES (5 dernières ventes du jour)
             self.recent_sales_tree.delete(*self.recent_sales_tree.get_children())
 
-            cur.execute("""
+            query_recent = """
                 SELECT 
-                    id_vente,
-                    TO_CHAR(date_vente, 'HH24:MI') as heure,
-                    total_vente
-                FROM vente 
-                WHERE DATE(date_vente) = CURRENT_DATE
-                ORDER BY date_vente DESC
-                LIMIT 5
-            """)
-
+                    v.id_vente,
+                    TO_CHAR(v.date_vente, 'HH24:MI') as heure,
+                    v.total_vente,
+                    u.nom as vendeur
+                FROM vente v
+                JOIN utilisateur u ON v.id_utilisateur = u.id_utilisateur
+                WHERE DATE(v.date_vente) = CURRENT_DATE
+            """
+            params_recent = []
+            
+            if not is_admin:
+                query_recent += " AND v.id_utilisateur = %s"
+                params_recent.append(user_id)
+            
+            query_recent += " ORDER BY v.date_vente DESC LIMIT 5"
+            
+            cur.execute(query_recent, tuple(params_recent))
             recent_sales = cur.fetchall()
 
             for sale in recent_sales:
@@ -360,19 +379,14 @@ class DashboardFrame(tk.Frame):
                     tk.END,
                     values=(
                         f"#{sale['id_vente']}",
+                        sale['vendeur'],
                         sale['heure'],
-                        f"{sale['total_vente']:.2f} FCFA"
+                        f"{sale['total_vente']:.2f}"
                     )
                 )
 
-            # Si pas de ventes aujourd'hui, afficher un message
             if not recent_sales:
-                self.recent_sales_tree.insert(
-                    '',
-                    tk.END,
-                    values=("Aucune vente", "aujourd'hui", "-")
-                )
-
+                self.recent_sales_tree.insert('', tk.END, values=("Aucune", "-", "-", "-"))
             cur.close()
             conn.close()
 
@@ -385,32 +399,62 @@ class DashboardFrame(tk.Frame):
             self.kpi_values[key].config(text=value)
 
     # ===================== NAVIGATION RAPIDE =====================
+    def _navigate(self, FrameClass):
+        """Méthode utilitaire pour naviguer via le master principal"""
+        try:
+            # self.master est 'content' frame
+            # self.master.master est BaseFrame, qui a la méthode show_page
+            if hasattr(self.master.master, 'show_page'):
+                self.master.master.show_page(FrameClass)
+            else:
+                print("Erreur Nav: method show_page not found on master.master")
+        except Exception as e:
+            print(f"Erreur lors de la navigation: {e}")
+
     def go_to_ventes(self):
-        """Naviguer vers la page des ventes"""
-        if self.go_dashboard:
-            if hasattr(self.master, 'show_page'):
-                try:
-                    from ui.ventes import VentesFrame
-                    self.master.show_page(VentesFrame)
-                except ImportError as e:
-                    print(f"Impossible d'importer VentesFrame: {e}")
+        try:
+            from ui.ventes import VentesFrame
+            self._navigate(VentesFrame)
+        except ImportError: pass
 
     def go_to_produits(self):
-        """Naviguer vers la page des produits"""
-        if self.go_dashboard:
-            if hasattr(self.master, 'show_page'):
-                try:
-                    from ui.produits import ProduitsFrame
-                    self.master.show_page(ProduitsFrame)
-                except ImportError as e:
-                    print(f"Impossible d'importer ProduitsFrame: {e}")
+        try:
+            from ui.produits import ProduitsFrame
+            self._navigate(ProduitsFrame)
+        except ImportError: pass
 
     def go_to_rapports(self):
-        """Naviguer vers la page des rapports"""
-        if self.go_dashboard:
-            if hasattr(self.master, 'show_page'):
-                try:
-                    from ui.rapports import RapportsFrame
-                    self.master.show_page(RapportsFrame)
-                except ImportError as e:
-                    print(f"Impossible d'importer RapportsFrame: {e}")
+        try:
+            from ui.rapports import RapportsFrame
+            self._navigate(RapportsFrame)
+        except ImportError: pass
+
+    def go_to_fournisseurs(self):
+        try:
+            from ui.fournisseurs import FournisseurFrame
+            self._navigate(FournisseurFrame)
+        except ImportError: pass
+
+    def go_to_commandes(self):
+        try:
+            from ui.commandes import CommandeAchatFrame
+            self._navigate(CommandeAchatFrame)
+        except ImportError: pass
+
+    def go_to_categories(self):
+        try:
+            from ui.categories import CategorieFrame
+            self._navigate(CategorieFrame)
+        except ImportError: pass
+
+    def go_to_stock(self):
+        try:
+            from ui.stock import StockFrame
+            self._navigate(StockFrame)
+        except ImportError: pass
+
+    def go_to_recus(self):
+        try:
+            from ui.reçus import ReçusFrame
+            self._navigate(ReçusFrame)
+        except ImportError: pass

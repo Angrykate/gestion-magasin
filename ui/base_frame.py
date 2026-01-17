@@ -164,7 +164,11 @@ class BaseFrame(tk.Frame):
         self.content = tk.Frame(self, bg='#f5f6f8')
         self.content.pack(fill=tk.BOTH, expand=True)
 
-        self.show_page(DashboardFrame)
+        # Redirection initiale selon le rôle
+        if self.user['role'] == 'CAISSIER':
+             self.show_page(VentesFrame)
+        else:
+             self.show_page(DashboardFrame)
 
     # ===================== NAVIGATION =====================
 

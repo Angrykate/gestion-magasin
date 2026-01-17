@@ -227,7 +227,7 @@ class ReçusFrame(tk.Frame):
         cur = get_cursor(conn)
         try:
             # Récupérer les reçus avec infos vente
-            cur.execute("""
+            query = """
                 SELECT 
                     r.id_recu,
                     r.id_vente,
@@ -238,8 +238,16 @@ class ReçusFrame(tk.Frame):
                 FROM recu r
                 JOIN vente v ON r.id_vente = v.id_vente
                 JOIN utilisateur u ON v.id_utilisateur = u.id_utilisateur
-                ORDER BY r.date_recu DESC
-            """)
+            """
+            
+            params = []
+            if self.user['role'] != 'ADMIN':
+                query += " WHERE v.id_utilisateur = %s"
+                params.append(self.user['id_utilisateur'])
+                
+            query += " ORDER BY r.date_recu DESC"
+            
+            cur.execute(query, tuple(params))
 
             receipts = cur.fetchall()
 
