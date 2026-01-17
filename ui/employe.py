@@ -175,10 +175,11 @@ class EmployeFrame(tk.Frame):
 
     # ===================== LOGIQUE =====================
     def on_tree_select(self, event):
-        selected = self.tree.focus()
-        if not selected:
+        selection = self.tree.selection()
+        if not selection:
             return
-
+        
+        selected = selection[0]
         values = self.tree.item(selected, 'values')
 
         self.id_entry.config(state='normal')

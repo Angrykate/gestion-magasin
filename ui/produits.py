@@ -14,7 +14,7 @@ class ProduitsFrame(tk.Frame):
     def __init__(self, parent,user =None,go_dashboard=None):
         super().__init__(parent, bg='white')
         self.pack(fill=tk.BOTH, expand=True)
-
+        self.is_clearing = False
         self.product_frame = tk.Frame(self, width=1070, height=567, bg='white')
         self.product_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -54,6 +54,7 @@ class ProduitsFrame(tk.Frame):
             width=22,
             state='readonly'
         )
+        self.category_combobox.bind("<<ComboboxSelected>>", self.on_category_change)
         self.category_combobox.grid(row=1, column=1, pady=(20, 10), sticky='w')
         self.category_combobox.set('Select Category')
 
@@ -179,6 +180,17 @@ class ProduitsFrame(tk.Frame):
                 command=cmd
             ).grid(row=0, column=i, padx=5)
 
+    def on_category_change(self, event=None):
+        cat_name = self.category_combobox.get()
+        cat = self.category_map.get(cat_name)
+
+        if not cat:
+            return
+
+        # Remplir le seuil
+        self.seuil_min_entry.delete(0, tk.END)
+        self.seuil_min_entry.insert(0, str(cat['seuil']))
+
     # ===================== SEARCH FRAME =====================
     def create_search_frame(self):
         search_frame = tk.LabelFrame(
@@ -284,12 +296,13 @@ class ProduitsFrame(tk.Frame):
         self.category_map = {}
         category_names = []
 
-        if categories:
-            for cat in categories:
-                cat_id = cat['id_categorie']
-                cat_nom = cat['nom_categorie']
-                category_names.append(cat_nom)
-                self.category_map[cat_nom] = cat_id
+        for cat in categories:
+            nom = cat['nom_categorie']
+            self.category_map[nom] = {
+                'id': cat['id_categorie'],
+                'seuil': cat['seuil_min_defaut']
+            }
+            category_names.append(nom)
 
         self.category_combobox['values'] = category_names
         if category_names:
@@ -322,9 +335,14 @@ class ProduitsFrame(tk.Frame):
             )
 
     def on_tree_select(self, event):
-        selected = self.treeview.focus()
-        if not selected:
+        if self.is_clearing:
             return
+        
+        selection = self.treeview.selection()
+        if not selection:
+            return
+        
+        selected = selection[0]
 
         values = self.treeview.item(selected, 'values')
         if not values or len(values) < 9:
@@ -346,6 +364,7 @@ class ProduitsFrame(tk.Frame):
                 self.price_entry.delete(0, tk.END)
                 self.price_entry.insert(0, str(product['prix_unitaire']))
 
+                self.quantity_entry.config(state='normal')
                 self.quantity_entry.delete(0, tk.END)
                 self.quantity_entry.insert(0, str(product['quantite_stock']))
 
@@ -368,6 +387,7 @@ class ProduitsFrame(tk.Frame):
 
         except Exception:
             return
+        self.quantity_entry.config(state='disabled')
 
     def validate_form(self):
         # Validation des champs obligatoires
@@ -379,9 +399,10 @@ class ProduitsFrame(tk.Frame):
             messagebox.showwarning("Erreur", "Le prix est obligatoire")
             return False
 
-        if not self.quantity_entry.get().strip():
-            messagebox.showwarning("Erreur", "La quantité est obligatoire")
-            return False
+        if self.quantity_entry['state'] == 'normal':
+            if not self.quantity_entry.get().strip():
+                messagebox.showwarning("Erreur", "La quantité est obligatoire")
+                return False
 
         if not self.category_combobox.get() or self.category_combobox.get() == 'Select Category':
             messagebox.showwarning("Erreur", "Veuillez sélectionner une catégorie")
@@ -420,8 +441,8 @@ class ProduitsFrame(tk.Frame):
         return True
 
     def get_category_id(self):
-        category_name = self.category_combobox.get()
-        return self.category_map.get(category_name)
+        cat = self.category_map.get(self.category_combobox.get())
+        return cat['id'] if cat else None
 
     def add_product(self):
         if not self.validate_form():
@@ -594,16 +615,28 @@ class ProduitsFrame(tk.Frame):
             messagebox.showinfo("Info", "Aucun produit trouvé")
 
     def clear_form(self):
+        self.is_clearing = True
+        
+        # Réactiver quantité pour permettre le delete
+        self.quantity_entry.config(state='normal')
+
         self.name_entry.delete(0, tk.END)
         self.price_entry.delete(0, tk.END)
         self.quantity_entry.delete(0, tk.END)
         self.seuil_min_entry.delete(0, tk.END)
         self.desc_text.delete('1.0', tk.END)
+
         self.category_combobox.set('Select Category')
         self.statut_combobox.set('Select Statut')
+
         self.search_entry.delete(0, tk.END)
         self.search_combobox.set('Search By')
 
-        # Désélectionner dans le treeview
-        for item in self.treeview.selection():
-            self.treeview.selection_remove(item)
+        # Réactiver quantité (déjà fait au début mais on s'assure qu'il reste normal pour un nouvel ajout)
+        self.quantity_entry.config(state='normal')
+
+        # Désélectionner treeview
+        self.treeview.selection_remove(self.treeview.selection())
+
+        self.is_clearing = False
+

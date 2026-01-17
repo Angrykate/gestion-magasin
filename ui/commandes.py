@@ -14,7 +14,9 @@ class CommandeAchatFrame(tk.Frame):
         self.go_dashboard = go_dashboard
         self.current_mode = "list"  # "list", "new", "detail"
         self.current_commande_id = None
+        self.current_commande_id = None
         self.lignes_commande = []  # Pour nouvelle commande
+        self.all_commandes_data = []  # Pour le filtrage local
 
         self.create_title()
         self.create_list_view()  # Vue par défaut
@@ -292,6 +294,7 @@ class CommandeAchatFrame(tk.Frame):
             state='readonly'
         )
         self.product_combobox.pack(side=tk.LEFT, padx=5)
+        self.product_combobox.bind("<<ComboboxSelected>>", self.on_product_change)
 
         tk.Label(
             add_frame,
@@ -319,7 +322,8 @@ class CommandeAchatFrame(tk.Frame):
         self.price_entry = tk.Entry(
             add_frame,
             font=('times new roman', 11),
-            width=10
+            width=10,
+            state='readonly'
         )
         self.price_entry.pack(side=tk.LEFT, padx=5)
 
@@ -456,6 +460,17 @@ class CommandeAchatFrame(tk.Frame):
         self.load_suppliers_for_new()
         self.load_products_for_new()
         self.update_cart_display()
+
+    def on_product_change(self, event=None):
+        nom_produit = self.product_combobox.get()
+        if nom_produit in self.product_map:
+            details = self.product_map[nom_produit]
+            prix = details['prix']
+            
+            self.price_entry.config(state='normal')
+            self.price_entry.delete(0, tk.END)
+            self.price_entry.insert(0, str(prix))
+            self.price_entry.config(state='readonly')
 
 
     # ===================== VUE DÉTAIL/RÉCEPTION =====================
@@ -705,7 +720,7 @@ class CommandeAchatFrame(tk.Frame):
         cur = get_cursor(conn)
 
         try:
-            cur.execute("SELECT id_produit, nom_produit FROM produit WHERE statut = 'ACTIF' ORDER BY nom_produit")
+            cur.execute("SELECT id_produit, nom_produit, prix_unitaire FROM produit WHERE statut = 'ACTIF' ORDER BY nom_produit")
             products = cur.fetchall()
 
             if hasattr(self, 'product_combobox'):
@@ -713,11 +728,17 @@ class CommandeAchatFrame(tk.Frame):
                 product_names = [p['nom_produit'] for p in products]
                 self.product_combobox['values'] = product_names
 
-                # Mapping nom simple -> id
-                self.product_map = {p['nom_produit']: p['id_produit'] for p in products}
+                # Mapping nom simple -> id et details
+                self.product_map = {}
+                for p in products:
+                    self.product_map[p['nom_produit']] = {
+                        'id': p['id_produit'],
+                        'prix': p['prix_unitaire']  # Mettre le prix d'achat si dispo, sinon prix unitaire
+                    }
 
                 if products:
                     self.product_combobox.current(0)
+                    self.on_product_change() # Remplir le premier prix
 
         except Exception as e:
             print(f"Erreur load_products: {e}")
@@ -752,6 +773,8 @@ class CommandeAchatFrame(tk.Frame):
             cur.execute(query)
             commandes = cur.fetchall()
 
+            self.all_commandes_data = []  # Réinitialiser la liste locale
+
             for cmd in commandes:
                 date_str = cmd['date_commande'].strftime("%d/%m/%Y")
                 montant = f"{cmd['montant']:.2f} €"
@@ -764,10 +787,9 @@ class CommandeAchatFrame(tk.Frame):
                 else:  # ANNULEE
                     tag = 'annulee'
 
-                self.commandes_tree.insert(
-                    '',
-                    tk.END,
-                    values=(
+                # Sauvegarder les données pour le filtre
+                command_data = {
+                    'values': (
                         cmd['id_commande_achat'],
                         cmd['nom_fournisseur'],
                         date_str,
@@ -775,8 +797,20 @@ class CommandeAchatFrame(tk.Frame):
                         montant,
                         cmd['createur']
                     ),
-                    tags=(tag,)
+                    'tags': (tag,)
+                }
+                self.all_commandes_data.append(command_data)
+
+                self.commandes_tree.insert(
+                    '',
+                    tk.END,
+                    values=command_data['values'],
+                    tags=command_data['tags']
                 )
+
+            # Réappliquer le filtre actuel si nécessaire
+            if hasattr(self, 'status_filter') and (self.status_filter.get() != 'TOUS' or self.supplier_filter.get() != 'TOUS'):
+                self.filter_commandes()
 
         except Exception as e:
             print(f"Erreur load_commandes: {e}")
@@ -886,7 +920,7 @@ class CommandeAchatFrame(tk.Frame):
         cur = get_cursor(conn)
 
         try:
-            cur.execute("SELECT id_produit, nom_produit FROM produit WHERE statut = 'ACTIF' ORDER BY nom_produit")
+            cur.execute("SELECT id_produit, nom_produit, prix_unitaire FROM produit WHERE statut = 'ACTIF' ORDER BY nom_produit")
             products = cur.fetchall()
 
             if products:
@@ -895,8 +929,13 @@ class CommandeAchatFrame(tk.Frame):
                 self.product_combobox['values'] = product_names
                 self.product_combobox.current(0)  # Sélectionner le premier
 
-                # Stocker le mapping nom -> id
-                self.product_map = {p['nom_produit']: p['id_produit'] for p in products}
+                # Stocker le mapping nom -> id et details
+                self.product_map = {}
+                for p in products:
+                    self.product_map[p['nom_produit']] = {
+                        'id': p['id_produit'],
+                        'prix': p['prix_unitaire']
+                    }
                 print(f"✅ {len(products)} produits chargés pour nouvelle commande")
 
         except Exception as e:
@@ -905,25 +944,28 @@ class CommandeAchatFrame(tk.Frame):
             cur.close()
             conn.close()
     def filter_commandes(self, event=None):
-        """Filtre les commandes selon les critères"""
+        """Filtre les commandes selon les critères en utilisant les données en mémoire"""
         status = self.status_filter.get()
         supplier = self.supplier_filter.get()
 
-        # Cacher toutes les lignes
-        for item in self.commandes_tree.get_children():
-            self.commandes_tree.item(item, tags=())
+        # Vider le tableau
+        self.commandes_tree.delete(*self.commandes_tree.get_children())
 
-        # Montrer seulement celles qui correspondent
-        for item in self.commandes_tree.get_children():
-            values = self.commandes_tree.item(item, 'values')
-
+        # Repeupler selon les filtres
+        for cmd in self.all_commandes_data:
+            values = cmd['values']
+            
+            # values[3] est le statut, values[1] est le fournisseur
             status_match = (status == 'TOUS') or (values[3] == status)
             supplier_match = (supplier == 'TOUS') or (values[1] == supplier)
 
             if status_match and supplier_match:
-                self.commandes_tree.item(item, tags=(f'{values[3].lower()}',))
-            else:
-                self.commandes_tree.detach(item)
+                self.commandes_tree.insert(
+                    '',
+                    tk.END,
+                    values=values,
+                    tags=cmd['tags']
+                )
 
     # def on_tree_click(self, event):
     #     """Gère les clics sur le tableau"""
@@ -969,11 +1011,13 @@ class CommandeAchatFrame(tk.Frame):
 
         try:
             # Utiliser le mapping par nom simple
-            product_id = self.product_map.get(product_name)
+            product_details = self.product_map.get(product_name)
 
-            if not product_id:
+            if not product_details:
                 messagebox.showerror("Erreur", f"Produit '{product_name}' non trouvé")
                 return
+
+            product_id = product_details['id']
 
             quantity = int(quantity)
             price = float(price)
@@ -1002,6 +1046,30 @@ class CommandeAchatFrame(tk.Frame):
 
         except ValueError as e:
             messagebox.showerror("Erreur", f"Données invalides: {e}")
+
+    def show_selected_detail(self):
+        """Affiche le détail de la commande sélectionnée"""
+        selection = self.commandes_tree.selection()
+        if selection:
+            values = self.commandes_tree.item(selection[0], 'values')
+            if values:
+                self.show_detail_view(int(values[0]))
+
+    def receptionner_selected(self):
+        """Réceptionne la commande sélectionnée"""
+        selection = self.commandes_tree.selection()
+        if selection:
+            values = self.commandes_tree.item(selection[0], 'values')
+            if values:
+                self.receptionner_commande(int(values[0]))
+
+    def annuler_selected(self):
+        """Annule la commande sélectionnée"""
+        selection = self.commandes_tree.selection()
+        if selection:
+            values = self.commandes_tree.item(selection[0], 'values')
+            if values:
+                self.annuler_commande(int(values[0]))
 
     def update_cart_display(self):
         """Met à jour l'affichage du panier"""

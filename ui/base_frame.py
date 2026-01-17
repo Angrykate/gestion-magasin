@@ -178,7 +178,7 @@ class BaseFrame(tk.Frame):
         self.content.pack_forget()
 
         # Cacher le menu
-        FULLSCREEN_PAGES = {VentesFrame,StockFrame,CommandeAchatFrame}
+        FULLSCREEN_PAGES = {VentesFrame,StockFrame,CommandeAchatFrame,RapportsFrame}
 
         if frame_class in FULLSCREEN_PAGES:
 

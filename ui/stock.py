@@ -480,7 +480,7 @@ class StockFrame(tk.Frame):
 
     def load_stock_history(self):
         """Charge l'historique des mouvements depuis la table mouvement_stock"""
-        self.history_tree.delete(*self.history_tree.get_children())
+        # On ne nettoie QUE l'historique complet ici, l'historique filtré est géré par filter_history
         self.full_history_tree.delete(*self.full_history_tree.get_children())
 
         conn = get_connection()
@@ -521,22 +521,6 @@ class StockFrame(tk.Frame):
                 tag = 'entree' if type_mvt.upper() in ['ENTREE', 'AJOUT', 'RECEPTION'] else 'sortie'
                 type_display = 'Entrée' if tag == 'entree' else 'Sortie'
 
-                # Historique filtré (top 10)
-                if i < 10:
-                    self.history_tree.insert(
-                        '',
-                        tk.END,
-                        values=(
-                            date_str,
-                            mvt['nom_produit'],
-                            type_display,
-                            quantite,
-                            mvt['origine'],
-                            mvt['utilisateur']
-                        ),
-                        tags=(tag,)
-                    )
-
                 # Historique complet (50 derniers)
                 self.full_history_tree.insert(
                     '',
@@ -551,6 +535,9 @@ class StockFrame(tk.Frame):
                     ),
                     tags=(tag,)
                 )
+            
+            # Rafraîchir l'historique filtré (haut droite)
+            self.filter_history()
 
         except Exception as e:
             print(f"Erreur load_stock_history: {e}")

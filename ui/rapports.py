@@ -93,7 +93,7 @@ class RapportsFrame(tk.Frame):
         self.ca_card = self.create_stat_card(
             stats_frame,
             "Chiffre d'affaires du jour",
-            "0 €",
+            "0 FCFA",
             "#198754",
             "💰"
         )
@@ -113,7 +113,7 @@ class RapportsFrame(tk.Frame):
         self.panier_card = self.create_stat_card(
             stats_frame,
             "Panier moyen",
-            "0 €",
+            "0 FCFA",
             "#6f42c1",
             "🛒"
         )
@@ -243,8 +243,8 @@ class RapportsFrame(tk.Frame):
             ('Date', 'Date/Heure', 120),
             ('Vendeur', 'Vendeur', 120),
             ('Articles', 'Articles', 80),
-            ('Total', 'Total €', 100),
-            ('Panier moyen', 'Panier moyen €', 100)
+            ('Total', 'Total FCFA', 100),
+            ('Panier moyen', 'Panier moyen FCFA', 100)
         ]
 
         for col, text, width in ventes_columns:
@@ -419,7 +419,7 @@ class RapportsFrame(tk.Frame):
 
         self.produits_tree = ttk.Treeview(
             table_container,
-            columns=('Rang', 'Produit', 'Catégorie', 'Qté vendue', 'CA €', 'Prix moyen'),
+            columns=('Rang', 'Produit', 'Catégorie', 'Qté vendue', 'CA FCFA', 'Prix moyen'),
             show='headings',
             yscrollcommand=v_scrollbar.set,
             xscrollcommand=h_scrollbar.set,
@@ -439,8 +439,8 @@ class RapportsFrame(tk.Frame):
             ('Produit', 'Produit', 180),
             ('Catégorie', 'Catégorie', 120),
             ('Qté vendue', 'Qté vendue', 100),
-            ('CA €', 'Chiffre d\'affaires', 120),
-            ('Prix moyen', 'Prix moyen €', 100)
+            ('CA FCFA', 'Chiffre d\'affaires', 120),
+            ('Prix moyen', 'Prix moyen FCFA', 100)
         ]
 
         for col, text, width in produits_columns:
@@ -491,7 +491,7 @@ class RapportsFrame(tk.Frame):
 
         self.employes_tree = ttk.Treeview(
             table_container,
-            columns=('Rang', 'Employé', 'Rôle', 'Ventes', 'Articles', 'CA €', 'Panier moyen'),
+            columns=('Rang', 'Employé', 'Rôle', 'Ventes', 'Articles', 'CA FCFA', 'Panier moyen'),
             show='headings',
             yscrollcommand=v_scrollbar.set,
             xscrollcommand=h_scrollbar.set,
@@ -512,8 +512,8 @@ class RapportsFrame(tk.Frame):
             ('Rôle', 'Rôle', 100),
             ('Ventes', 'Nb ventes', 80),
             ('Articles', 'Articles vendus', 100),
-            ('CA €', 'Chiffre d\'affaires', 120),
-            ('Panier moyen', 'Panier moyen €', 100)
+            ('CA FCFA', 'Chiffre d\'affaires', 120),
+            ('Panier moyen', 'Panier moyen FCFA', 100)
         ]
 
         for col, text, width in employes_columns:
@@ -554,7 +554,7 @@ class RapportsFrame(tk.Frame):
         self.budget_card = self.create_stat_card(
             stats_frame,
             "Budget engagé",
-            "0 €",
+            "0 FCFA",
             "#0d6efd",
             "💰"
         )
@@ -680,9 +680,9 @@ class RapportsFrame(tk.Frame):
 
             if stats:
                 # Mettre à jour les cartes
-                self.update_card_value(self.ca_card, f"{stats['ca_jour']:,.2f} €")
+                self.update_card_value(self.ca_card, f"{stats['ca_jour']:,.2f} FCFA")
                 self.update_card_value(self.ventes_card, str(stats['nb_ventes_jour']))
-                self.update_card_value(self.panier_card, f"{stats['panier_moyen']:.2f} €")
+                self.update_card_value(self.panier_card, f"{stats['panier_moyen']:.2f} FCFA")
 
             # 2. Évolution vs hier
             cur.execute("""
@@ -957,7 +957,7 @@ class RapportsFrame(tk.Frame):
 
             budget = cur.fetchone()
             if budget:
-                self.update_card_value(self.budget_card, f"{budget['budget']:,.2f} €")
+                self.update_card_value(self.budget_card, f"{budget['budget']:,.2f} FCFA")
 
             # 2. Tableau besoins réappro
             self.achats_tree.delete(*self.achats_tree.get_children())
@@ -1023,10 +1023,10 @@ class RapportsFrame(tk.Frame):
             height = bar.get_height()
             if height > 0:
                 ax.text(bar.get_x() + bar.get_width() / 2., height,
-                        f'{height:.0f}€', ha='center', va='bottom', fontsize=8)
+                        f'{height:.0f}FCFA', ha='center', va='bottom', fontsize=8)
 
         ax.set_xlabel('Heure', fontsize=9)
-        ax.set_ylabel('CA (€)', fontsize=9)
+        ax.set_ylabel('CA (FCFA)', fontsize=9)
         ax.set_title('CA par heure', fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -1060,7 +1060,7 @@ class RapportsFrame(tk.Frame):
         ax.plot(dates, ca, color='#198754', linewidth=2, marker='o', markersize=4)
 
         ax.set_xlabel('Date', fontsize=9)
-        ax.set_ylabel('CA (€)', fontsize=9)
+        ax.set_ylabel('CA (FCFA)', fontsize=9)
         ax.set_title('CA 30 derniers jours', fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3)
 
@@ -1111,7 +1111,7 @@ class RapportsFrame(tk.Frame):
         ax2.barh(y_pos, ca, color=colors)
         ax2.set_yticks(y_pos)
         ax2.set_yticklabels(categories, fontsize=8)
-        ax2.set_xlabel('CA (€)', fontsize=9)
+        ax2.set_xlabel('CA (FCFA)', fontsize=9)
         ax2.set_title('CA par catégorie', fontsize=10, fontweight='bold')
         ax2.grid(True, alpha=0.3, axis='x')
 

@@ -468,7 +468,18 @@ class VentesFrame(tk.Frame):
         self.selected_details_frame.pack(fill=tk.BOTH, expand=True)
 
     def clear_selection(self):
-        """Efface la sélection du produit"""
+        """Efface la sélection du produit et le retire du panier si présent"""
+        if self.selected_product:
+            # Vérifier si le produit est dans le panier et le retirer
+            product_id = self.selected_product['id']
+            initial_len = len(self.panier)
+            self.panier = [item for item in self.panier if item['id'] != product_id]
+            
+            # Si le panier a changé, mettre à jour l'affichage
+            if len(self.panier) != initial_len:
+                self.update_cart_display()
+                # messagebox.showinfo("Info", "Produit retiré du panier")
+
         self.selected_product = None
         self.selected_details_frame.pack_forget()
         self.selected_empty_label.pack(expand=True)

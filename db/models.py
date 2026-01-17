@@ -573,7 +573,7 @@ def get_categories_for_dropdown():
     cur = get_cursor(conn)
     try:
         cur.execute("""
-            SELECT id_categorie, nom_categorie 
+            SELECT id_categorie, nom_categorie , seuil_min_defaut
             FROM categorie 
             ORDER BY nom_categorie
         """)

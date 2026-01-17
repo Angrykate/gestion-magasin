@@ -231,7 +231,7 @@ class DashboardFrame(tk.Frame):
             """)
             ca_result = cur.fetchone()
             if ca_result:
-                self.update_kpi('ca_jour', f"{ca_result['ca_jour']:,.2f} €")
+                self.update_kpi('ca_jour', f"{ca_result['ca_jour']:,.2f} FCFA")
 
             # 2. Nombre de ventes du jour
             cur.execute("""
@@ -361,7 +361,7 @@ class DashboardFrame(tk.Frame):
                     values=(
                         f"#{sale['id_vente']}",
                         sale['heure'],
-                        f"{sale['total_vente']:.2f} €"
+                        f"{sale['total_vente']:.2f} FCFA"
                     )
                 )
 

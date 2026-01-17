@@ -146,9 +146,10 @@ class CategorieFrame(tk.Frame):
             )
 
     def on_tree_select(self, event):
-        selected = self.tree.focus()
-        if not selected:
+        selection = self.tree.selection()
+        if not selection:
             return
+        selected = selection[0]
         values = self.tree.item(selected, 'values')
         self.id_entry.config(state='normal')
         self.id_entry.delete(0, tk.END)
