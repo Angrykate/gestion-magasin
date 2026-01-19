@@ -121,7 +121,7 @@ class VentesFrame(tk.Frame):
         columns = [
             ('ID', 'ID', 35),
             ('Nom', 'Produit', 110),
-            ('Prix', 'Prix €', 50),
+            ('Prix', 'Prix FCFA', 50),
             ('Stock', 'Stock', 50)
         ]
 
@@ -460,7 +460,7 @@ class VentesFrame(tk.Frame):
 
         # Configurer les labels
         self.selected_name_label.config(text=self.selected_product['nom'])
-        self.selected_price_label.config(text=f"Prix: {self.selected_product['prix']:.2f} €")
+        self.selected_price_label.config(text=f"Prix: {self.selected_product['prix']:.2f} FCFA")
         self.selected_stock_label.config(text=f"Stock disponible: {self.selected_product['stock']}")
 
         # Réinitialiser la spinbox
@@ -586,7 +586,7 @@ class VentesFrame(tk.Frame):
 
         self.articles_count_label.config(text=str(total_articles))
         self.lines_count_label.config(text=str(total_lines))
-        self.total_label.config(text=f"{total_amount:.2f} €")
+        self.total_label.config(text=f"{total_amount:.2f} FCFA")
 
     def validate_sale(self):
         """Lance la fenêtre de paiement"""

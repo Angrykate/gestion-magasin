@@ -253,7 +253,7 @@ class ReçusFrame(tk.Frame):
 
             for rec in receipts:
                 date_str = rec['date_recu'].strftime("%d/%m/%Y %H:%M")
-                montant = f"{rec['montant_total']:,.2f} €"
+                montant = f"{rec['montant_total']:,.2f} FCFA"
 
                 self.receipts_tree.insert(
                     '',
@@ -596,7 +596,7 @@ class ReçusFrame(tk.Frame):
             c.drawCentredString(width / 2, height - 100, f"Reçu Vente #{self.current_receipt['vente_id']}")
 
             c.setFont("Helvetica", 12)
-            c.drawCentredString(width / 2, height - 150, f"Montant: {self.current_receipt['montant']:.2f} €")
+            c.drawCentredString(width / 2, height - 150, f"Montant: {self.current_receipt['montant']:.2f} FCFA")
             c.drawCentredString(width / 2, height - 180, f"Date: {self.current_receipt['date'].strftime('%d/%m/%Y')}")
 
             c.drawCentredString(width / 2, height - 250, "Merci pour votre achat !")

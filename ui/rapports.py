@@ -901,6 +901,17 @@ class RapportsFrame(tk.Frame):
         cur = get_cursor(conn)
 
         try:
+            # 1. Nombre total d'employés (hors Admin)
+            cur.execute("""
+                SELECT COUNT(*) as total 
+                FROM utilisateur 
+                WHERE role != 'ADMIN'
+            """)
+            total_stats = cur.fetchone()
+            if total_stats:
+                self.update_card_value(self.total_employe_card, str(total_stats['total']))
+
+            # 2. Performances
             self.employes_tree.delete(*self.employes_tree.get_children())
 
             cur.execute("""
@@ -1145,6 +1156,9 @@ class RapportsFrame(tk.Frame):
 
     def filter_ventes_table(self, event=None):
         """Filtre le tableau des ventes"""
+        # Recharger d'abord pour avoir toutes les données (évite que detach ne soit permanent)
+        self.load_ventes_data()
+        
         periode = self.period_var.get()
 
         # Calculer la date limite
@@ -1171,6 +1185,9 @@ class RapportsFrame(tk.Frame):
 
     def filter_stock_table(self, event=None):
         """Filtre le tableau du stock"""
+        # Recharger d'abord pour avoir toutes les données (évite que detach ne soit permanent)
+        self.load_stock_data()
+        
         categorie = self.categorie_filter.get()
         etat = self.etat_filter.get()
 
