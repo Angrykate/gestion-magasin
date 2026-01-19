@@ -321,6 +321,9 @@ class ReçusFrame(tk.Frame):
                     r.montant_total,
                     v.id_vente,
                     v.date_vente,
+                    v.montant_recu,
+                    v.monnaie_rendue,
+                    v.mode_paiement,
                     u.nom as vendeur,
                     u.role
                 FROM recu r
@@ -357,62 +360,49 @@ class ReçusFrame(tk.Frame):
                 'montant': receipt_info['montant_total'],
                 'vendeur': receipt_info['vendeur'],
                 'role_vendeur': receipt_info['role'],
+                'montant_recu': receipt_info['montant_recu'],
+                'monnaie_rendue': receipt_info['monnaie_rendue'],
+                'mode_paiement': receipt_info['mode_paiement'],
                 'items': items
             }
 
-            # Générer l'affichage texte
-            self.display_receipt_text(receipt_info, items)
+            # Générer l'affichage texte via l'utilitaire professionnel
+            from ui.receipt_utils import format_receipt_text
+            
+            # Items est une liste de tuples (nom, qte, pu, total)
+            formatted_text = format_receipt_text(
+                sale_id=self.current_receipt['vente_id'],
+                date=self.current_receipt['date'],
+                seller=self.current_receipt['vendeur'],
+                items=items,
+                total=self.current_receipt['montant'],
+                montant_recu=self.current_receipt['montant_recu'],
+                mode_paiement=self.current_receipt['mode_paiement'],
+                monnaie_rendue=self.current_receipt['monnaie_rendue']
+            )
+            
+            self.display_receipt_text(formatted_text)
 
         except Exception as e:
             print(f"Erreur load_receipt_details: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             cur.close()
             conn.close()
 
-    def display_receipt_text(self, receipt_info, items):
+    def display_receipt_text(self, formatted_text):
         """Affiche le reçu formaté dans le Text widget"""
-        # Effacer le contenu précédent
         self.receipt_text.config(state='normal')
         self.receipt_text.delete(1.0, tk.END)
-
-        # Construire le reçu
-        lines = []
-        lines.append("=" * 40)
-        lines.append("         REÇU DE VENTE")
-        lines.append("=" * 40)
-        lines.append(f"Vente N° : {receipt_info['id_vente']}")
-        lines.append(f"Date     : {receipt_info['date_recu'].strftime('%Y-%m-%d %H:%M')}")
-        lines.append(f"Vendeur  : {receipt_info['vendeur']} ({receipt_info['role']})")
-        lines.append(f"Recu N°  : {receipt_info['id_recu']}")
-        lines.append("-" * 40)
-        lines.append(f"{'Produit':<20} {'Qté':>5} {'PU':>8} {'Total':>10}")
-        lines.append("-" * 40)
-
-        total_general = 0
-        for item in items:
-            nom = item['nom_produit'][:19]  # Limiter la longueur
-            qte = item['quantite_vendue']
-            pu = item['prix_unitaire']
-            total = item['total_ligne']
-            total_general += total
-
-            lines.append(f"{nom:<20} {qte:>5} {pu:>8.2f} {total:>10.2f}")
-
-        lines.append("-" * 40)
-        lines.append(f"{'TOTAL À PAYER :':<33} {total_general:>10.2f} €")
-        lines.append("=" * 40)
-        lines.append("Merci pour votre confiance !")
-        lines.append("=" * 40)
-
-        # Insérer dans le Text widget
-        for line in lines:
-            self.receipt_text.insert(tk.END, line + "\n")
-
-        # Centrer le texte
+        self.receipt_text.insert(tk.END, formatted_text)
+        
+        # Centrer (approximatif car le texte est pré-formaté, on peut laisser tel quel ou centrer le bloc)
+        # Pour un ticket réaliste, le formatage interne gère l'alignement. 
+        # On peut centrer tout le widget si on veut.
         self.receipt_text.tag_configure("center", justify='center')
         self.receipt_text.tag_add("center", "1.0", "end")
-
-        # Désactiver l'édition
+        
         self.receipt_text.config(state='disabled')
 
     def generate_txt_receipt(self):
@@ -469,7 +459,7 @@ class ReçusFrame(tk.Frame):
 
             # Titre
             c.setFont("Helvetica-Bold", 16)
-            c.drawCentredString(width / 2, height - 50, "REÇU DE VENTE")
+            c.drawCentredString(width / 2, height - 50, "TICKET DE CAISSE")
 
             c.setFont("Helvetica", 10)
 
@@ -483,6 +473,16 @@ class ReçusFrame(tk.Frame):
 
             y -= 20
             c.drawString(50, y, f"Vendeur  : {self.current_receipt['vendeur']}")
+            
+            # Infos paiement
+            if self.current_receipt.get('montant_recu') is not None:
+                y -= 20
+                c.drawString(50, y, f"Paiement : {self.current_receipt.get('mode_paiement', 'ESPECES')}")
+                y -= 20
+                c.drawString(50, y, f"Reçu     : {self.current_receipt['montant_recu']:,.0f} FCFA")
+                if self.current_receipt.get('monnaie_rendue'):
+                    y -= 20
+                    c.drawString(50, y, f"Rendu    : {self.current_receipt['monnaie_rendue']:,.0f} FCFA")
 
             # Ligne séparatrice
             y -= 30
@@ -507,8 +507,8 @@ class ReçusFrame(tk.Frame):
 
                 c.drawString(50, y, nom)
                 c.drawString(width - 300, y, str(item['quantite_vendue']))
-                c.drawString(width - 250, y, f"{item['prix_unitaire']:.2f}")
-                c.drawString(width - 150, y, f"{item['total_ligne']:.2f}")
+                c.drawString(width - 250, y, f"{item['prix_unitaire']:.0f}")
+                c.drawString(width - 150, y, f"{item['total_ligne']:.0f}")
                 y -= 20
 
                 # Nouvelle page si nécessaire
@@ -523,18 +523,13 @@ class ReçusFrame(tk.Frame):
             # Total
             y -= 30
             c.setFont("Helvetica-Bold", 12)
-            c.drawString(width - 200, y, "TOTAL À PAYER :")
-            c.drawString(width - 150, y, f"{self.current_receipt['montant']:.2f} €")
+            c.drawString(width - 250, y, "TOTAL À PAYER :")
+            c.drawString(width - 130, y, f"{self.current_receipt['montant']:,.0f} FCFA")
 
             # Pied de page
             y -= 50
             c.setFont("Helvetica-Oblique", 10)
             c.drawCentredString(width / 2, y, "Merci pour votre confiance !")
-
-            # Signature
-            y -= 40
-            c.line(width - 200, y, width - 50, y)
-            c.drawString(width - 150, y - 15, "Signature")
 
             c.save()
 

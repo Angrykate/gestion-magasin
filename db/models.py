@@ -627,15 +627,11 @@ def get_products_for_sale():
 
     return rows
 
-def process_sale(panier, id_utilisateur):
+
+def process_sale(panier, id_utilisateur, montant_recu=None):
     """
-    panier = [
-        {
-            'id': int,
-            'quantité': int,
-            'prix_unitaire': float
-        }
-    ]
+    Nouvelle version avec gestion paiement
+    montant_recu: None si pas espèces, sinon montant donné par client
     """
 
     conn = get_connection()
@@ -646,7 +642,7 @@ def process_sale(panier, id_utilisateur):
 
     try:
         # =========================
-        # 1. Vérifier le stock
+        # 1. Vérifier le stock (inchangé)
         # =========================
         for item in panier:
             cur.execute(
@@ -673,18 +669,34 @@ def process_sale(panier, id_utilisateur):
         )
 
         # =========================
-        # 3. Créer la vente
+        # 3. Calcul monnaie si espèces
+        # =========================
+        monnaie_rendue = None
+        mode_paiement = 'ESPECES'
+
+        if montant_recu is not None:
+            if montant_recu < total_vente:
+                raise Exception(
+                    f"Montant insuffisant. Total: {total_vente:.2f}, Reçu: {montant_recu:.2f}"
+                )
+            monnaie_rendue = montant_recu - total_vente
+            mode_paiement = 'ESPECES'
+        else:
+            mode_paiement = 'CARTE'  # Par défaut si pas espèces
+
+        # =========================
+        # 4. Créer la vente avec infos paiement
         # =========================
         cur.execute("""
-            INSERT INTO vente (total_vente, id_utilisateur)
-            VALUES (%s, %s)
+            INSERT INTO vente (total_vente, id_utilisateur, montant_recu, monnaie_rendue, mode_paiement)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id_vente
-        """, (total_vente, id_utilisateur))
+        """, (total_vente, id_utilisateur, montant_recu, monnaie_rendue, mode_paiement))
 
         id_vente = cur.fetchone()[0]
 
         # =========================
-        # 4. Lignes + stock
+        # 5. Lignes + stock (inchangé)
         # =========================
         for item in panier:
             # ligne_vente
@@ -698,13 +710,6 @@ def process_sale(panier, id_utilisateur):
                 item['quantité'],
                 item['prix_unitaire']
             ))
-
-            # mise à jour stock
-            # cur.execute("""
-            #     UPDATE produit
-            #     SET quantite_stock = quantite_stock - %s
-            #     WHERE id_produit = %s
-            # """, (item['quantité'], item['id']))
 
         conn.commit()
         return True, id_vente

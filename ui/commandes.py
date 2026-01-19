@@ -4,7 +4,6 @@ from datetime import datetime
 from db.models import get_connection, get_cursor
 from db.connection import get_connection, get_cursor
 
-
 class CommandeAchatFrame(tk.Frame):
     def __init__(self, parent, user=None, go_dashboard=None):
         super().__init__(parent, bg='#f5f6f8')

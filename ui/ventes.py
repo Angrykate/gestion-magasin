@@ -11,12 +11,11 @@ class VentesFrame(tk.Frame):
         self.panier = []  # Liste pour stocker les articles du panier
         self.selected_product = None  # Produit actuellement sélectionné
         self.go_dashboard = go_dashboard
-
+        self.valider_btn = None
         self.create_title()
         self.create_left_frame()
         self.create_center_frame()
         self.create_right_frame()
-        self.go_dashboard = go_dashboard
 
         # Charger les produits disponibles
         self.load_products()
@@ -376,7 +375,7 @@ class VentesFrame(tk.Frame):
 
         self.total_label = tk.Label(
             total_frame,
-            text="0.00 €",
+            text="0.00 FCFA",
             font=('times new roman', 18, 'bold'),
             fg='#dc3545',
             bg='white'
@@ -384,7 +383,7 @@ class VentesFrame(tk.Frame):
         self.total_label.pack(side=tk.RIGHT)
 
         # Bouton Valider
-        tk.Button(
+        self.valider_btn = tk.Button(
             right_frame,
             text="✅ VALIDER LA VENTE",
             font=('times new roman', 12, 'bold'),
@@ -395,7 +394,11 @@ class VentesFrame(tk.Frame):
             padx=20,
             pady=12,
             command=self.validate_sale
-        ).pack(pady=30, padx=15, fill=tk.X)
+        )
+        self.valider_btn.pack(pady=30, padx=15, fill=tk.X)
+        # Désactiver le bouton si panier vide
+        if not self.panier:
+            self.valider_btn.config(state='disabled')
 
     # ===================== LOGIQUE =====================
     def load_products(self):
@@ -553,6 +556,11 @@ class VentesFrame(tk.Frame):
 
         # Mettre à jour les statistiques
         self.update_stats()
+        if hasattr(self, 'valider_btn'):
+            if self.panier:
+                self.valider_btn.config(state='normal', bg='#198754')
+            else:
+                self.valider_btn.config(state='disabled', bg='#6c757d')
 
     def on_panier_click(self, event):
         """Gère le clic sur le panier (pour supprimer)"""
@@ -581,31 +589,94 @@ class VentesFrame(tk.Frame):
         self.total_label.config(text=f"{total_amount:.2f} €")
 
     def validate_sale(self):
+        """Lance la fenêtre de paiement"""
         if not self.panier:
             messagebox.showwarning("Attention", "Le panier est vide")
             return
 
+        # Calculer le total
+        total = sum(item['sous-total'] for item in self.panier)
+
+        # Importer la dialog de paiement
+        from ui.paiement_dialog import PaiementDialog
+
+        # Créer la fenêtre modale
+        def paiement_callback(success, montant_recu, mode_paiement):
+            """Callback appelé après la fenêtre de paiement"""
+            if success:
+                self.finaliser_vente(montant_recu, mode_paiement)
+            else:
+                messagebox.showinfo("Annulé", "Paiement annulé")
+
+        PaiementDialog(self, total, paiement_callback)
+
+    def finaliser_vente(self, montant_recu, mode_paiement):
+        """Finalise la vente après paiement validé"""
+        # Convertir mode_paiement pour la BD
+        mode_bd = mode_paiement if mode_paiement else 'CARTE'
+
+        # Appeler process_sale avec les infos paiement
         success, result = process_sale(
             panier=self.panier,
-            id_utilisateur=self.user['id_utilisateur']
+            id_utilisateur=self.user['id_utilisateur'],
+            montant_recu=montant_recu
         )
 
         if success:
-            # Générer et afficher le reçu immédiatement
-            receipt_text = self.generate_receipt_text(result)
+            # Récupérer infos pour ticket
+            # Note: process_sale returns sale_id (result)
+            
+            # Utiliser le nouveau formateur
+            from ui.receipt_utils import format_receipt_text
+            
+            # Re-fetch infos for the receipt to be sure
+            from datetime import datetime
+            
+            # NOTE: We need to fetch items again or pass them. 
+            # Better to fetch to ensure consistency with DB
+            conn = get_connection()
+            cur = get_cursor(conn)
+            cur.execute("SELECT date_vente, monnaie_rendue FROM vente WHERE id_vente=%s", (result,))
+            sale_data = cur.fetchone()
+            
+            cur.execute("""
+                SELECT nom_produit, quantite_vendue, ligne_vente.prix_unitaire, (quantite_vendue * ligne_vente.prix_unitaire) as total_ligne
+                FROM ligne_vente JOIN produit ON ligne_vente.id_produit = produit.id_produit
+                WHERE id_vente=%s
+            """, (result,))
+            items = cur.fetchall()
+            cur.close()
+            conn.close()
+            
+            # Calcul du total pour le ticket (items sont des dicts)
+            total = sum(item['total_ligne'] for item in items)
+            
+            receipt_text = format_receipt_text(
+                sale_id=result,
+                date=sale_data['date_vente'],
+                seller=self.user['nom'],
+                items=items,
+                total=total,
+                montant_recu=montant_recu,
+                mode_paiement=mode_paiement,
+                monnaie_rendue=sale_data['monnaie_rendue']
+            )
 
-            # Afficher dans une fenêtre popup
-            self.show_receipt_popup(receipt_text, result)
-
+            # Réinitialiser l'interface D'ABORD (pour que l'arrière-plan soit "propre")
             self.panier = []
             self.update_cart_display()
             self.clear_selection()
             self.load_products()
+
+            # Afficher le Reçu (C'est ÇA la confirmation)
+            # On ne met plus de messagebox "Succès" qui bloque ou cache le reçu
+            self.show_receipt_popup(receipt_text, result)
+
         else:
             messagebox.showerror("Erreur", result)
 
-    def generate_receipt_text(self, sale_id):
-        """Génère le texte du reçu"""
+    def generate_receipt_text(self, sale_id, montant_recu=None, mode_paiement=None):
+        """Génère le texte du reçu avec infos paiement"""
         conn = get_connection()
         cur = get_cursor(conn)
 
@@ -616,48 +687,60 @@ class VentesFrame(tk.Frame):
             JOIN utilisateur u ON v.id_utilisateur = u.id_utilisateur
             WHERE v.id_vente = %s
         """, (sale_id,))
-
+        
         sale_info = cur.fetchone()
-
+        
+        # Récupérer les lignes
         cur.execute("""
-            SELECT p.nom_produit, lv.quantite_vendue, lv.prix_unitaire
+            SELECT 
+                p.nom_produit,
+                lv.quantite_vendue,
+                lv.prix_unitaire,
+                (lv.quantite_vendue * lv.prix_unitaire) as total_ligne
             FROM ligne_vente lv
             JOIN produit p ON lv.id_produit = p.id_produit
             WHERE lv.id_vente = %s
         """, (sale_id,))
-
+        
         items = cur.fetchall()
+        
+        cur.close()
+        conn.close()
 
-        # Construire le reçu
+        # Construire le ticket
         lines = []
         lines.append("=" * 40)
-        lines.append("         REÇU DE VENTE")
+        lines.append("         TICKET DE CAISSE")
         lines.append("=" * 40)
         lines.append(f"Vente N° : {sale_id}")
         lines.append(f"Date     : {sale_info['date_vente'].strftime('%Y-%m-%d %H:%M')}")
         lines.append(f"Vendeur  : {sale_info['vendeur']}")
+        
+        # Ajouter infos Paiement
+        if montant_recu is not None:
+             lines.append(f"Paiement : {mode_paiement}")
+             lines.append(f"Reçu     : {montant_recu:,.0f} FCFA")
+             if sale_info['monnaie_rendue']:
+                 lines.append(f"Rendu    : {sale_info['monnaie_rendue']:,.0f} FCFA")
+
         lines.append("-" * 40)
         lines.append(f"{'Produit':<20} {'Qté':>5} {'PU':>8} {'Total':>10}")
         lines.append("-" * 40)
 
-        total = 0
+        total_general = 0
         for item in items:
             nom = item['nom_produit'][:19]
             qte = item['quantite_vendue']
             pu = item['prix_unitaire']
-            ligne_total = qte * pu
-            total += ligne_total
-
-            lines.append(f"{nom:<20} {qte:>5} {pu:>8.2f} {ligne_total:>10.2f}")
+            total = item['total_ligne']
+            total_general += total
+            lines.append(f"{nom:<20} {qte:>5} {pu:>8.0f} {total:>10.0f}")
 
         lines.append("-" * 40)
-        lines.append(f"{'TOTAL À PAYER :':<33} {total:>10.2f} €")
+        lines.append(f"{'TOTAL À PAYER :':<25} {total_general:>10.0f} FCFA")
         lines.append("=" * 40)
         lines.append("Merci pour votre confiance !")
         lines.append("=" * 40)
-
-        cur.close()
-        conn.close()
 
         return "\n".join(lines)
 
