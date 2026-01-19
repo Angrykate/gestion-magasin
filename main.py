@@ -10,8 +10,19 @@ class App(tk.Tk):
         self.resizable(False, False)
 
         self.current_user = None
+        
+        # Stocker la taille originale de la fenêtre
+        self.original_size = "1270x668+0+0"
 
         self.show_login()
+    
+    def resize_window(self, width, height):
+        """Redimensionne la fenêtre"""
+        self.geometry(f"{width}x{height}+0+0")
+    
+    def restore_window_size(self):
+        """Restaure la taille originale de la fenêtre"""
+        self.geometry(self.original_size)
 
     def clear(self):
         for widget in self.winfo_children():

@@ -183,6 +183,16 @@ class BaseFrame(tk.Frame):
 
         # Cacher le menu
         FULLSCREEN_PAGES = {VentesFrame,StockFrame,CommandeAchatFrame,RapportsFrame}
+        
+        # Redimensionner la fenêtre si on ouvre Rapports
+        root = self.winfo_toplevel()
+        if frame_class == RapportsFrame:
+            if hasattr(root, 'resize_window'):
+                root.resize_window(1600, 800)  # Taille agrandie pour Rapports
+        else:
+            # Restaurer la taille normale pour les autres pages
+            if hasattr(root, 'restore_window_size'):
+                root.restore_window_size()
 
         if frame_class in FULLSCREEN_PAGES:
 
